@@ -1,0 +1,28 @@
+# A 股量化交易软件配置
+
+trading:
+  initial_capital: 500000        # 初始资金（元）
+  max_capital: 1000000           # 最大可用资金（元）
+  commission_buy: 0.00025        # 买入佣金 0.025%
+  commission_sell: 0.00025       # 卖出佣金 0.025%
+  stamp_duty: 0.001              # 印花税 0.1%（仅卖出收取）
+  slippage: 0.0                  # 滑点（默认 0）
+  min_trade_unit: 100            # 最小交易单位（1 手 = 100 股）
+
+risk:
+  max_position_pct: 0.20         # 单股最大仓位占比 20%
+  stop_loss_pct: 0.08            # 止损线 8%
+  take_profit_pct: 0.20          # 止盈线 20%
+  max_drawdown_limit: 0.15       # 最大回撤熔断 15%
+  max_stocks: 5                  # 最多同时持有股票数量
+
+data:
+  cache_db: data/cache.db        # SQLite 缓存数据库路径
+  default_start: "20200101"      # 默认数据起始日期
+  kline_ttl_hours: 24            # K 线缓存有效期（小时）
+
+# A 股涨跌停规则
+market:
+  normal_limit: 0.10             # 普通股票涨跌幅限制 10%
+  st_limit: 0.05                 # ST 股票涨跌幅限制 5%
+  star_limit: 0.20               # 科创板/创业板注册制涨跌幅限制 20%
