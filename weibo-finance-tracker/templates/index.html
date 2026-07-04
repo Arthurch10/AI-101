@@ -93,10 +93,12 @@
   <div class="card">
     <h2>① 数据源 <span class="badge">真实微博数据 / 演示数据</span></h2>
     <div class="toolbar">
-      <input type="text" id="uidInput" placeholder="微博 UID（添加真实博主）" style="flex:1;min-width:180px;">
-      <button class="ghost" id="addBtn">＋ 添加博主</button>
+      <input type="text" id="uidInput" placeholder="微博 UID 或 昵称（添加真实博主）" style="flex:1;min-width:200px;">
+      <button class="ghost" id="searchBtn">🔍 按昵称搜索</button>
+      <button class="ghost" id="addBtn">＋ 添加</button>
       <button id="refreshBtn">🔄 抓取最新微博</button>
     </div>
+    <div id="searchResults" class="blogger-grid" style="margin-top:10px;"></div>
     <div class="toolbar" style="margin-top:8px;">
       <input type="password" id="cookieInput" placeholder="微博 Cookie（可选，从 m.weibo.cn 登录后复制，抓取真实数据需要）" style="flex:1;min-width:260px;">
       <label style="font-size:13px;color:var(--muted);">抓取页数
@@ -300,21 +302,56 @@ function showMsg(text, kind) {
   el.style.color = kind === 'ok' ? 'var(--green)' : (kind === 'err' ? 'var(--red)' : 'var(--muted)');
 }
 
+async function addBlogger(query) {
+  const res = await fetch('/api/add_blogger', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ query, cookie: $('cookieInput').value.trim() })
+  });
+  const d = await res.json();
+  if (d.error) { showMsg(d.error, 'err'); return false; }
+  showMsg(`✓ 已添加博主：${d.blogger.screen_name}（${fmt(d.blogger.followers_count)} 粉丝）`, 'ok');
+  await loadBloggers();
+  return true;
+}
+
 $('addBtn').onclick = async () => {
-  const uid = $('uidInput').value.trim();
-  if (!uid) { showMsg('请输入微博 UID', 'err'); return; }
+  const q = $('uidInput').value.trim();
+  if (!q) { showMsg('请输入微博 UID 或昵称', 'err'); return; }
   const btn = $('addBtn');
   btn.disabled = true; btn.textContent = '添加中…';
+  try { if (await addBlogger(q)) { $('uidInput').value = ''; $('searchResults').innerHTML = ''; } }
+  catch (e) { showMsg('添加失败: ' + e, 'err'); }
+  finally { btn.disabled = false; btn.textContent = '＋ 添加'; }
+};
+
+$('searchBtn').onclick = async () => {
+  const q = $('uidInput').value.trim();
+  if (!q) { showMsg('请输入昵称关键词', 'err'); return; }
+  const btn = $('searchBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 搜索中…';
+  $('searchResults').innerHTML = '';
   try {
-    const res = await fetch('/api/add_blogger', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ uid, cookie: $('cookieInput').value.trim() })
-    });
+    const res = await fetch('/api/search_bloggers?q=' + encodeURIComponent(q) + '&cookie=' + encodeURIComponent($('cookieInput').value.trim()));
     const d = await res.json();
-    if (d.error) { showMsg(d.error, 'err'); }
-    else { showMsg(`✓ 已添加博主：${d.blogger.screen_name}（${fmt(d.blogger.followers_count)} 粉丝）`, 'ok'); $('uidInput').value = ''; await loadBloggers(); }
-  } catch (e) { showMsg('添加失败: ' + e, 'err'); }
-  finally { btn.disabled = false; btn.textContent = '＋ 添加博主'; }
+    if (d.error) { showMsg(d.error, 'err'); return; }
+    if (!d.results || !d.results.length) { showMsg(d.hint || '未找到匹配博主', 'err'); return; }
+    showMsg(`找到 ${d.results.length} 个候选，点击卡片即可添加：`, 'info');
+    $('searchResults').innerHTML = d.results.map(b => `
+      <div class="blogger" data-q="${b.uid}" title="点击添加">
+        <div>
+          <div class="name">${b.screen_name}</div>
+          <div class="meta">${fmt(b.followers_count)} 粉丝 · ${b.verified_reason || '—'}</div>
+        </div>
+      </div>`).join('');
+    document.querySelectorAll('#searchResults .blogger').forEach(el => {
+      el.addEventListener('click', async () => {
+        el.style.opacity = '.5';
+        if (await addBlogger(el.dataset.q)) el.remove();
+        else el.style.opacity = '1';
+      });
+    });
+  } catch (e) { showMsg('搜索失败: ' + e, 'err'); }
+  finally { btn.disabled = false; btn.textContent = '🔍 按昵称搜索'; }
 };
 
 $('refreshBtn').onclick = async () => {

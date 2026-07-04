@@ -52,6 +52,7 @@ python3 webapp.py
 
 界面功能：
 
+- **添加博主** — 输入 UID 或昵称；昵称可先「🔍 按昵称搜索」再点候选卡片添加
 - **勾选博主** — 点击卡片多选，支持全选/清空
 - **一键分析** — 运行 NLP 情绪分析，实时展示三大结论
 - **可视化** — 周度情绪趋势折线图 (Chart.js)、板块/个股热度与共识度进度条、量化指标卡片
@@ -84,8 +85,10 @@ python3 export_report.py my.html    # 指定输出文件名
 # 搜索博主
 wft blogger search "财经"
 
-# 添加博主 (通过微博 UID)
-wft blogger add 1234567890
+# 添加博主 (支持 UID 或昵称)
+wft blogger add 1234567890          # 纯数字按 UID 添加
+wft blogger add 财经老王             # 昵称：列出候选，交互选择
+wft blogger add 财经老王 --first     # 昵称：直接添加匹配度最高的
 
 # 添加并标记为手动优选
 wft blogger add 1234567890 --manual

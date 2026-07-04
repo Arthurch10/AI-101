@@ -45,42 +45,90 @@ def blogger_group():
     pass
 
 
-@blogger_group.command("add")
-@click.argument("uid")
-@click.option("--manual", is_flag=True, help="标记为手动筛选")
-@click.option("--cookie", default="", help="微博 Cookie (提高抓取成功率)")
-def add_blogger(uid, manual, cookie):
-    """添加博主 (通过微博 UID)"""
-    config = load_config()
-    cookie = cookie or config.get("weibo_cookie", "")
-
-    console.print(f"正在获取博主 [cyan]{uid}[/] 信息...", style="bold")
-    scraper = WeiboScraper(cookie=cookie)
-    info = scraper.fetch_blogger_info(uid)
-
-    if not info:
-        console.print("[red]获取博主信息失败，请检查 UID 是否正确或是否需要设置 Cookie[/]")
-        return
-
+def _persist_blogger(info, manual):
+    """把博主信息写入数据库并打印成功面板"""
     db.add_blogger(
         uid=info["uid"],
         screen_name=info["screen_name"],
-        description=info["description"],
-        followers_count=info["followers_count"],
-        statuses_count=info["statuses_count"],
-        verified=info["verified"],
-        verified_reason=info["verified_reason"],
+        description=info.get("description", ""),
+        followers_count=info.get("followers_count", 0),
+        statuses_count=info.get("statuses_count", 0),
+        verified=info.get("verified", False),
+        verified_reason=info.get("verified_reason", ""),
         manual_selected=manual,
     )
-
     console.print(Panel(
         f"[green]✓[/] 已添加博主: [bold cyan]{info['screen_name']}[/]\n"
-        f"  粉丝: {info['followers_count']:,}\n"
-        f"  微博数: {info['statuses_count']:,}\n"
-        f"  认证: {info.get('verified_reason', '无')}\n"
+        f"  UID: {info['uid']}\n"
+        f"  粉丝: {info.get('followers_count', 0):,}\n"
+        f"  认证: {info.get('verified_reason', '') or '无'}\n"
         f"  手动筛选: {'是' if manual else '否'}",
         title="添加成功",
     ))
+
+
+@blogger_group.command("add")
+@click.argument("query")
+@click.option("--manual", is_flag=True, help="标记为手动筛选")
+@click.option("--cookie", default="", help="微博 Cookie (提高抓取成功率)")
+@click.option("--first", is_flag=True, help="按昵称搜索时直接添加匹配度最高的第一个")
+def add_blogger(query, manual, cookie, first):
+    """添加博主 (支持微博 UID 或昵称)
+
+    QUERY 为纯数字时按 UID 添加；否则按昵称搜索并选择。
+    """
+    config = load_config()
+    cookie = cookie or config.get("weibo_cookie", "")
+    scraper = WeiboScraper(cookie=cookie)
+
+    # 纯数字 → 按 UID 直接添加
+    if query.isdigit():
+        console.print(f"正在获取博主 [cyan]{query}[/] 信息...", style="bold")
+        info = scraper.fetch_blogger_info(query)
+        if not info:
+            console.print("[red]获取博主信息失败，请检查 UID 是否正确或是否需要设置 Cookie[/]")
+            return
+        _persist_blogger(info, manual)
+        return
+
+    # 否则按昵称搜索
+    console.print(f"按昵称搜索 [cyan]{query}[/] ...", style="bold")
+    results = scraper.search_bloggers(query)
+    if not results:
+        console.print("[yellow]未找到匹配博主。微博搜索通常需要登录态，"
+                      "请配置 Cookie 后重试，或改用 UID 添加。[/]")
+        return
+
+    # 精确昵称匹配优先
+    exact = [b for b in results if b["screen_name"] == query]
+    ordered = exact + [b for b in results if b not in exact]
+
+    if first or not sys.stdin.isatty():
+        _persist_blogger(ordered[0], manual)
+        return
+
+    # 交互式选择
+    table = Table(title=f"搜索结果: {query}")
+    table.add_column("#", style="bold cyan", width=4)
+    table.add_column("昵称", style="bold")
+    table.add_column("UID", style="cyan")
+    table.add_column("粉丝数", justify="right")
+    table.add_column("认证", style="green")
+    for i, b in enumerate(ordered[:15], 1):
+        table.add_row(str(i), b["screen_name"], b["uid"],
+                      f"{b['followers_count']:,}",
+                      b.get("verified_reason", "") or ("V" if b["verified"] else ""))
+    console.print(table)
+
+    raw = console.input("\n[bold]输入要添加的编号（回车取消）:[/] ").strip()
+    if not raw.isdigit():
+        console.print("[dim]已取消[/]")
+        return
+    idx = int(raw) - 1
+    if not (0 <= idx < len(ordered[:15])):
+        console.print("[red]编号超出范围[/]")
+        return
+    _persist_blogger(ordered[idx], manual)
 
 
 @blogger_group.command("search")
@@ -116,7 +164,7 @@ def search_blogger(keyword, cookie):
         )
 
     console.print(table)
-    console.print("\n使用 [bold]wft blogger add <UID>[/] 添加博主")
+    console.print("\n使用 [bold]wft blogger add <UID 或昵称>[/] 添加博主")
 
 
 @blogger_group.command("list")

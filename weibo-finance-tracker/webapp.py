@@ -124,33 +124,72 @@ def api_ranking():
     return jsonify(result)
 
 
-@app.route("/api/add_blogger", methods=["POST"])
-def api_add_blogger():
-    """通过微博 UID 添加真实博主"""
+@app.route("/api/search_bloggers")
+def api_search_bloggers():
+    """按昵称搜索博主，返回候选列表"""
     _ensure_data()
-    data = request.get_json(silent=True) or {}
-    uid = str(data.get("uid", "")).strip()
-    cookie = data.get("cookie", "") or load_config().get("weibo_cookie", "")
-    if not uid:
-        return jsonify({"error": "请提供微博 UID"}), 400
+    q = request.args.get("q", "").strip()
+    cookie = request.args.get("cookie", "") or load_config().get("weibo_cookie", "")
+    if not q:
+        return jsonify({"error": "请输入昵称关键词"}), 400
 
     scraper = WeiboScraper(cookie=cookie)
-    info = scraper.fetch_blogger_info(uid)
-    if not info:
+    results = scraper.search_bloggers(q)
+    if not results:
         return jsonify({
-            "error": "获取博主信息失败。微博接口通常需要登录态，请在下方填写微博 Cookie 后重试。"
-        }), 400
+            "results": [],
+            "hint": "未找到匹配博主。微博搜索通常需要登录态，请填写 Cookie 后重试，或改用 UID 添加。",
+        })
+    exact = [b for b in results if b["screen_name"] == q]
+    ordered = exact + [b for b in results if b not in exact]
+    return jsonify({"results": [
+        {"uid": b["uid"], "screen_name": b["screen_name"],
+         "followers_count": b["followers_count"],
+         "verified_reason": b.get("verified_reason", ""),
+         "description": b.get("description", "")[:60]}
+        for b in ordered[:15]
+    ]})
+
+
+@app.route("/api/add_blogger", methods=["POST"])
+def api_add_blogger():
+    """通过微博 UID 或昵称添加真实博主"""
+    _ensure_data()
+    data = request.get_json(silent=True) or {}
+    query = str(data.get("uid", "") or data.get("query", "")).strip()
+    cookie = data.get("cookie", "") or load_config().get("weibo_cookie", "")
+    if not query:
+        return jsonify({"error": "请提供微博 UID 或昵称"}), 400
+
+    scraper = WeiboScraper(cookie=cookie)
+
+    if query.isdigit():
+        info = scraper.fetch_blogger_info(query)
+        if not info:
+            return jsonify({
+                "error": "获取博主信息失败。微博接口通常需要登录态，请填写微博 Cookie 后重试。"
+            }), 400
+    else:
+        results = scraper.search_bloggers(query)
+        if not results:
+            return jsonify({
+                "error": "未找到该昵称的博主。请填写 Cookie 后重试，或改用 UID 添加。"
+            }), 400
+        exact = [b for b in results if b["screen_name"] == query]
+        info = (exact or results)[0]
 
     db.add_blogger(
         uid=info["uid"], screen_name=info["screen_name"],
-        description=info["description"], followers_count=info["followers_count"],
-        statuses_count=info["statuses_count"], verified=info["verified"],
-        verified_reason=info["verified_reason"],
+        description=info.get("description", ""),
+        followers_count=info.get("followers_count", 0),
+        statuses_count=info.get("statuses_count", 0),
+        verified=info.get("verified", False),
+        verified_reason=info.get("verified_reason", ""),
         manual_selected=bool(data.get("manual")),
     )
     return jsonify({"ok": True, "blogger": {
         "uid": info["uid"], "screen_name": info["screen_name"],
-        "followers_count": info["followers_count"],
+        "followers_count": info.get("followers_count", 0),
     }})
 
 
