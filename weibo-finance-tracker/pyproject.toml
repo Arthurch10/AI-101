@@ -28,3 +28,6 @@ dependencies = [
 
 [project.scripts]
 wft = "src.main:cli"
+
+[tool.setuptools]
+packages = ["src"]

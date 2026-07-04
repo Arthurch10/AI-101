@@ -102,6 +102,32 @@ wft rank --top 20
 wft top3
 ```
 
+### 深度情绪分析
+
+交互式选择要分析的博主，输出市场走向、板块个股热度、量化指标三大部分：
+
+```bash
+# 交互选择博主编号（如输入 1,4,5 或 all）
+wft deep
+
+# 分析全部博主
+wft deep --all
+
+# 指定博主 UID（可多次传入）
+wft deep --uid 1729390673 --uid 2001001003
+
+# 使用 LLM 深度分析
+wft deep --llm
+```
+
+输出内容：
+
+- **① 市场整体走向与热度** — 趋势方向/强度、热度指数、情绪动量、量能信号、近 4 周情绪趋势图
+- **② 板块与个股** — 讨论热度、共识度、情绪分及标签（强烈看多 → 强烈看空）
+- **③ 量化参考指标** — BSI 博主情绪指数、MHI 市场热度指数、CI 共识指数、SM 情绪动量、RAI 风险偏好指数、板块轮动信号、信号综述
+
+> 也可直接运行 `python3 run_analysis.py`（会自动加载演示数据），等价于 `wft deep`。
+
 ### 投资建议
 
 ```bash
@@ -160,7 +186,11 @@ weibo-finance-tracker/
 │   ├── database.py            # 数据库管理
 │   ├── analyzer.py            # 观点分析（NLP + LLM）
 │   ├── ranker.py              # 博主排名算法
-│   └── advisor.py             # 投资建议生成
+│   ├── advisor.py             # 投资建议生成
+│   ├── deep_analysis.py       # 深度语义分析 & 量化指标
+│   ├── report.py              # 深度分析报告渲染（CLI/脚本共用）
+│   └── demo.py                # 演示数据
+├── run_analysis.py            # 交互式深度分析脚本（等价 wft deep）
 ├── requirements.txt
 ├── pyproject.toml
 └── README.md

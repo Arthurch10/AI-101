@@ -15,6 +15,7 @@ from .scraper import WeiboScraper
 from .ranker import BloggerRanker
 from .analyzer import OpinionAnalyzer
 from .advisor import InvestmentAdvisor
+from .report import select_bloggers_interactive, render_deep_report
 
 console = Console()
 
@@ -385,6 +386,37 @@ def show_advice(days, top3_only):
         title=f"投资参考报告 ({report['generated_at']})",
         border_style="green",
     ))
+
+
+# ===================================================================
+# 深度分析
+# ===================================================================
+
+@cli.command("deep")
+@click.option("--uid", "uids", multiple=True,
+              help="指定博主 UID，可多次传入；不传则交互选择")
+@click.option("--all", "select_all", is_flag=True, help="分析全部博主")
+@click.option("--llm", is_flag=True, help="使用 LLM 深度分析")
+def deep_analysis(uids, select_all, llm):
+    """深度情绪分析: 市场走向/板块个股/量化指标 (可交互选择博主)"""
+    console.print(Panel.fit(
+        "[bold cyan]微博财经博主 · 深度情绪分析系统[/]",
+        border_style="cyan",
+    ))
+
+    if uids:
+        selected_uids = list(uids)
+    elif select_all:
+        selected_uids = [b["uid"] for b in db.get_all_bloggers()]
+    else:
+        selected = select_bloggers_interactive()
+        selected_uids = [b["uid"] for b in selected]
+
+    if not selected_uids:
+        console.print("[yellow]未选择任何博主，请先用 wft blogger add 添加博主[/]")
+        return
+
+    render_deep_report(selected_uids, use_llm=llm)
 
 
 # ===================================================================
