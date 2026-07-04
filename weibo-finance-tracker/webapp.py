@@ -9,17 +9,27 @@
 运行:  python3 webapp.py  然后打开 http://127.0.0.1:5000
 """
 
+import json
 import os
 
 from flask import Flask, jsonify, request, render_template
 
 from src import database as db
 from src.demo import load_demo_data
+from src.scraper import WeiboScraper
 from src.analyzer import OpinionAnalyzer
 from src.ranker import BloggerRanker
 from src.deep_analysis import DeepAnalyzer
 
 app = Flask(__name__)
+
+
+def load_config():
+    path = os.path.join(os.path.dirname(__file__), "config", "config.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
 
 
 def _ensure_data():
@@ -112,6 +122,69 @@ def api_ranking():
             "consistency_score": r["consistency_score"],
         })
     return jsonify(result)
+
+
+@app.route("/api/add_blogger", methods=["POST"])
+def api_add_blogger():
+    """通过微博 UID 添加真实博主"""
+    _ensure_data()
+    data = request.get_json(silent=True) or {}
+    uid = str(data.get("uid", "")).strip()
+    cookie = data.get("cookie", "") or load_config().get("weibo_cookie", "")
+    if not uid:
+        return jsonify({"error": "请提供微博 UID"}), 400
+
+    scraper = WeiboScraper(cookie=cookie)
+    info = scraper.fetch_blogger_info(uid)
+    if not info:
+        return jsonify({
+            "error": "获取博主信息失败。微博接口通常需要登录态，请在下方填写微博 Cookie 后重试。"
+        }), 400
+
+    db.add_blogger(
+        uid=info["uid"], screen_name=info["screen_name"],
+        description=info["description"], followers_count=info["followers_count"],
+        statuses_count=info["statuses_count"], verified=info["verified"],
+        verified_reason=info["verified_reason"],
+        manual_selected=bool(data.get("manual")),
+    )
+    return jsonify({"ok": True, "blogger": {
+        "uid": info["uid"], "screen_name": info["screen_name"],
+        "followers_count": info["followers_count"],
+    }})
+
+
+@app.route("/api/refresh", methods=["POST"])
+def api_refresh():
+    """抓取所有博主的最新微博（真实数据）"""
+    _ensure_data()
+    data = request.get_json(silent=True) or {}
+    cookie = data.get("cookie", "") or load_config().get("weibo_cookie", "")
+    pages = int(data.get("pages", 3))
+
+    scraper = WeiboScraper(cookie=cookie)
+    results, errors = {}, []
+    for blogger in db.get_all_bloggers():
+        uid = blogger["uid"]
+        try:
+            count = scraper.fetch_and_save(uid, pages)
+            results[blogger["screen_name"]] = count
+        except Exception as e:  # noqa: BLE001
+            results[blogger["screen_name"]] = 0
+            errors.append(f"{blogger['screen_name']}: {e}")
+
+    total = sum(results.values())
+    # 抓取到新数据后立即做一次情绪分析
+    if total > 0:
+        OpinionAnalyzer().analyze_unprocessed(use_llm=False)
+
+    payload = {"ok": True, "total": total, "per_blogger": results}
+    if total == 0:
+        payload["hint"] = ("未抓取到新数据。微博接口通常需要登录态，"
+                           "请填写微博 Cookie 后重试；或确认已添加真实博主 UID。")
+    if errors:
+        payload["errors"] = errors[:5]
+    return jsonify(payload)
 
 
 if __name__ == "__main__":

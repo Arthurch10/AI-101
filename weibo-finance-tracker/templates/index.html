@@ -50,6 +50,11 @@
   button:hover { filter: brightness(1.1); }
   button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
   button:disabled { opacity: .5; cursor: not-allowed; }
+  input[type=text], input[type=password], input[type=number] {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 12px; font-size: 13px; outline: none;
+  }
+  input:focus { border-color: var(--accent); }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
   .kpi { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
   .kpi .label { font-size: 12px; color: var(--muted); }
@@ -84,9 +89,26 @@
 </header>
 
 <div class="wrap">
+  <!-- 数据源 -->
+  <div class="card">
+    <h2>① 数据源 <span class="badge">真实微博数据 / 演示数据</span></h2>
+    <div class="toolbar">
+      <input type="text" id="uidInput" placeholder="微博 UID（添加真实博主）" style="flex:1;min-width:180px;">
+      <button class="ghost" id="addBtn">＋ 添加博主</button>
+      <button id="refreshBtn">🔄 抓取最新微博</button>
+    </div>
+    <div class="toolbar" style="margin-top:8px;">
+      <input type="password" id="cookieInput" placeholder="微博 Cookie（可选，从 m.weibo.cn 登录后复制，抓取真实数据需要）" style="flex:1;min-width:260px;">
+      <label style="font-size:13px;color:var(--muted);">抓取页数
+        <input type="number" id="pagesInput" value="3" min="1" max="10" style="width:56px;">
+      </label>
+    </div>
+    <div id="dataMsg" class="disclaimer" style="display:none;"></div>
+  </div>
+
   <!-- 博主选择 -->
   <div class="card">
-    <h2>① 选择博主 <span class="badge" id="selInfo"></span></h2>
+    <h2>② 选择博主 <span class="badge" id="selInfo"></span></h2>
     <div class="blogger-grid" id="bloggerGrid"></div>
     <div class="toolbar">
       <button class="ghost" id="selAll">全选</button>
@@ -99,7 +121,7 @@
   <div id="results">
     <!-- 市场走向 -->
     <div class="card">
-      <h2>② 市场整体走向与热度 <span class="badge" id="trendMeta"></span></h2>
+      <h2>③ 市场整体走向与热度 <span class="badge" id="trendMeta"></span></h2>
       <div class="kpis" id="trendKpis"></div>
       <div style="margin-top:18px;"><canvas id="trendChart" height="90"></canvas></div>
     </div>
@@ -107,12 +129,12 @@
     <!-- 板块 & 个股 -->
     <div class="grid2">
       <div class="card">
-        <h2>③ 板块讨论度 · 共识 · 情绪</h2>
+        <h2>④ 板块讨论度 · 共识 · 情绪</h2>
         <table><thead><tr><th>板块</th><th>提及</th><th>讨论热度</th><th>共识度</th><th>情绪</th></tr></thead>
           <tbody id="sectorRows"></tbody></table>
       </div>
       <div class="card">
-        <h2>④ 个股讨论度 · 情绪 · 共识</h2>
+        <h2>⑤ 个股讨论度 · 情绪 · 共识</h2>
         <table><thead><tr><th>个股</th><th>提及</th><th>情绪分</th><th>博主共识</th><th>情绪</th></tr></thead>
           <tbody id="tickerRows"></tbody></table>
       </div>
@@ -120,7 +142,7 @@
 
     <!-- 量化指标 -->
     <div class="card">
-      <h2>⑤ 量化参考指标</h2>
+      <h2>⑥ 量化参考指标</h2>
       <div class="kpis" id="quantKpis"></div>
       <div class="rotation" id="rotation"></div>
       <div class="summary" id="signalSummary" style="margin-top:14px;"></div>
@@ -269,6 +291,51 @@ function renderQuant(q) {
     (rot.losing.length ? `<div><b class="neg">▼ 降温:</b> ${rot.losing.join('、')}</div>` : '');
   $('signalSummary').textContent = '📊 ' + q.signal_summary;
 }
+
+function showMsg(text, kind) {
+  const el = $('dataMsg');
+  el.style.display = 'block';
+  el.textContent = text;
+  el.style.borderColor = kind === 'ok' ? 'var(--green)' : (kind === 'err' ? 'var(--red)' : 'var(--border)');
+  el.style.color = kind === 'ok' ? 'var(--green)' : (kind === 'err' ? 'var(--red)' : 'var(--muted)');
+}
+
+$('addBtn').onclick = async () => {
+  const uid = $('uidInput').value.trim();
+  if (!uid) { showMsg('请输入微博 UID', 'err'); return; }
+  const btn = $('addBtn');
+  btn.disabled = true; btn.textContent = '添加中…';
+  try {
+    const res = await fetch('/api/add_blogger', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ uid, cookie: $('cookieInput').value.trim() })
+    });
+    const d = await res.json();
+    if (d.error) { showMsg(d.error, 'err'); }
+    else { showMsg(`✓ 已添加博主：${d.blogger.screen_name}（${fmt(d.blogger.followers_count)} 粉丝）`, 'ok'); $('uidInput').value = ''; await loadBloggers(); }
+  } catch (e) { showMsg('添加失败: ' + e, 'err'); }
+  finally { btn.disabled = false; btn.textContent = '＋ 添加博主'; }
+};
+
+$('refreshBtn').onclick = async () => {
+  const btn = $('refreshBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 抓取中…';
+  showMsg('正在抓取最新微博并分析…', 'info');
+  try {
+    const res = await fetch('/api/refresh', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ cookie: $('cookieInput').value.trim(), pages: +$('pagesInput').value || 3 })
+    });
+    const d = await res.json();
+    if (d.total > 0) {
+      showMsg(`✓ 抓取 ${d.total} 条最新微博并完成情绪分析，可重新运行分析查看结果。`, 'ok');
+      await loadBloggers();
+    } else {
+      showMsg(d.hint || '未抓取到新数据。', 'err');
+    }
+  } catch (e) { showMsg('抓取失败: ' + e, 'err'); }
+  finally { btn.disabled = false; btn.textContent = '🔄 抓取最新微博'; }
+};
 
 loadBloggers();
 </script>
