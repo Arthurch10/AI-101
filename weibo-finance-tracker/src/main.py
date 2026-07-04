@@ -419,6 +419,32 @@ def deep_analysis(uids, select_all, llm):
     render_deep_report(selected_uids, use_llm=llm)
 
 
+@cli.command("export")
+@click.option("--output", "-o", default="report.html", help="输出文件路径")
+@click.option("--uid", "uids", multiple=True, help="指定博主 UID，可多次传入")
+@click.option("--demo", is_flag=True, help="数据库为空时自动加载演示数据")
+def export_report(output, uids, demo):
+    """导出自包含静态 HTML 报告 (浏览器直接打开，无需服务器)"""
+    from .html_report import export
+
+    if not db.get_all_bloggers() and not demo:
+        console.print("[yellow]数据库暂无博主。先运行 wft fetch，"
+                      "或加 --demo 使用演示数据。[/]")
+        return
+
+    selected = list(uids) if uids else None
+    path, data = export(output, uids=selected, auto_demo=demo)
+    console.print(Panel(
+        f"[green]✓[/] 已生成静态报告: [bold cyan]{path}[/]\n"
+        f"  分析博主: {', '.join(s['screen_name'] for s in data['selected'])}\n"
+        f"  市场走向: {data['trend']['trend_direction']} | "
+        f"热度: {data['trend']['heat_index']} | "
+        f"BSI: {data['quant']['blogger_sentiment_index']}\n"
+        f"  用浏览器直接打开该文件即可查看完整可视化报告。",
+        title="导出成功", border_style="green",
+    ))
+
+
 # ===================================================================
 # 一键执行
 # ===================================================================

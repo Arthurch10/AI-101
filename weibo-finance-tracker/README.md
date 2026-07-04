@@ -64,6 +64,11 @@ python3 webapp.py
 若无法访问本地服务器端口，可导出一个**完全自包含的静态 HTML 报告**，用浏览器直接打开即可查看全部可视化结果（无任何外部依赖，SVG 内联趋势图）：
 
 ```bash
+wft export                          # 生成 report.html（数据库需已有数据）
+wft export -o my.html --demo        # 指定文件名，空库时用演示数据
+wft export --uid 1729390673         # 仅导出指定博主
+
+# 或用独立脚本（自动加载演示数据）
 python3 export_report.py            # 生成 report.html
 python3 export_report.py my.html    # 指定输出文件名
 ```
@@ -219,6 +224,7 @@ weibo-finance-tracker/
 │   ├── advisor.py             # 投资建议生成
 │   ├── deep_analysis.py       # 深度语义分析 & 量化指标
 │   ├── report.py              # 深度分析报告渲染（CLI/脚本共用）
+│   ├── html_report.py         # 静态 HTML 报告导出
 │   └── demo.py                # 演示数据
 ├── templates/
 │   └── index.html             # 网页界面

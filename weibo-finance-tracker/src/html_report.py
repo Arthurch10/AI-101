@@ -1,4 +1,51 @@
-<!DOCTYPE html>
+"""导出自包含静态 HTML 报告 - 无需服务器，浏览器直接打开"""
+
+import json
+
+from . import database as db
+from .demo import load_demo_data
+from .analyzer import OpinionAnalyzer
+from .deep_analysis import DeepAnalyzer
+
+
+def build_data(uids=None, auto_demo=True):
+    """运行完整分析，返回与 /api/analyze 一致的结果字典"""
+    db.init_db()
+    if auto_demo and not db.get_all_bloggers():
+        load_demo_data()
+
+    if not uids:
+        uids = [b["uid"] for b in db.get_all_bloggers()]
+
+    OpinionAnalyzer().analyze_unprocessed(use_llm=False)
+
+    posts, opinions = [], []
+    for uid in uids:
+        posts.extend(db.get_posts(uid, limit=500))
+        opinions.extend(db.get_opinions(uid, limit=500))
+
+    deep = DeepAnalyzer()
+    bloggers = [db.get_blogger(u) for u in uids]
+
+    return {
+        "bloggers": [
+            {"uid": b["uid"], "screen_name": b["screen_name"],
+             "followers_count": b["followers_count"],
+             "verified_reason": b.get("verified_reason", ""),
+             "manual_selected": bool(b.get("manual_selected")),
+             "post_count": db.get_blogger_post_count(b["uid"])}
+            for b in db.get_all_bloggers()
+        ],
+        "selected": [{"uid": u, "screen_name": (db.get_blogger(u) or {}).get("screen_name", u)}
+                     for u in uids],
+        "trend": deep.analyze_market_trend(opinions, posts),
+        "sectors": deep.analyze_sectors(opinions, posts)[:15],
+        "tickers": deep.analyze_tickers(opinions, posts)[:15],
+        "quant": deep.compute_quant_indicators(opinions, posts, bloggers),
+    }
+
+
+HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -42,7 +89,7 @@
 <body>
 <header>
   <h1>📈 微博财经博主 · 深度情绪分析报告</h1>
-  <p>静态离线报告 · 生成时间 2026-07-04 14:43:27</p>
+  <p>静态离线报告 · 生成时间 __GEN_TIME__</p>
 </header>
 <div class="wrap">
   <div class="card">
@@ -73,7 +120,7 @@
   </div>
 </div>
 <script>
-const DATA = {"bloggers": [{"uid": "1729390673", "screen_name": "财经老王", "followers_count": 1580000, "verified_reason": "知名财经博主", "manual_selected": true, "post_count": 8}, {"uid": "2001001001", "screen_name": "股市早知道", "followers_count": 3200000, "verified_reason": "财经大V", "manual_selected": false, "post_count": 10}, {"uid": "2001001002", "screen_name": "量化小李", "followers_count": 680000, "verified_reason": "基金经理", "manual_selected": false, "post_count": 10}, {"uid": "2001001003", "screen_name": "半导体观察", "followers_count": 920000, "verified_reason": "行业分析师", "manual_selected": false, "post_count": 12}, {"uid": "2001001004", "screen_name": "新能源投研", "followers_count": 1100000, "verified_reason": "新能源研究员", "manual_selected": false, "post_count": 8}, {"uid": "2001001005", "screen_name": "消费龙头研究", "followers_count": 750000, "verified_reason": "消费行业分析师", "manual_selected": false, "post_count": 10}, {"uid": "2001001006", "screen_name": "技术面老张", "followers_count": 2400000, "verified_reason": "技术分析专家", "manual_selected": false, "post_count": 11}, {"uid": "2001001007", "screen_name": "宏观经济眼", "followers_count": 1850000, "verified_reason": "经济学博士", "manual_selected": false, "post_count": 19}], "selected": [{"uid": "1729390673", "screen_name": "财经老王"}, {"uid": "2001001001", "screen_name": "股市早知道"}, {"uid": "2001001002", "screen_name": "量化小李"}, {"uid": "2001001003", "screen_name": "半导体观察"}, {"uid": "2001001004", "screen_name": "新能源投研"}, {"uid": "2001001005", "screen_name": "消费龙头研究"}, {"uid": "2001001006", "screen_name": "技术面老张"}, {"uid": "2001001007", "screen_name": "宏观经济眼"}], "trend": {"trend_direction": "上行", "trend_strength": 58.6, "heat_index": 82.4, "momentum": -17.0, "volume_signal": "缩量", "avg_sentiment": 0.293, "total_posts": 88, "total_engagement": 449809, "weekly_sentiment_trend": [["06/13", 0.328], ["06/20", 0.4331], ["06/27", 0.2686], ["07/04", 0.0987]]}, "sectors": [{"name": "半导体", "mention_count": 15, "discussion_heat": 100.0, "consensus_degree": 97.1, "sentiment_score": 0.2995, "sentiment_label": "看多", "top_bloggers": ["2001001007", "2001001001", "2001001002"], "related_tickers": ["宁德时代", "中芯国际", "中微公司"]}, {"name": "新能源", "mention_count": 15, "discussion_heat": 100.0, "consensus_degree": 33.8, "sentiment_score": -0.292, "sentiment_label": "看空", "top_bloggers": ["1729390673", "2001001001", "2001001002"], "related_tickers": ["宁德时代", "中芯国际", "通威股份"]}, {"name": "消费", "mention_count": 13, "discussion_heat": 86.7, "consensus_degree": 49.5, "sentiment_score": -0.5227, "sentiment_label": "强烈看空", "top_bloggers": ["2001001001", "2001001003", "2001001004"], "related_tickers": ["五粮液", "贵州茅台"]}, {"name": "地产", "mention_count": 12, "discussion_heat": 80.0, "consensus_degree": 51.2, "sentiment_score": 0.5105, "sentiment_label": "强烈看多", "top_bloggers": ["2001001003", "2001001004", "2001001006"], "related_tickers": []}, {"name": "人工智能", "mention_count": 9, "discussion_heat": 60.0, "consensus_degree": 100.0, "sentiment_score": 0.9979, "sentiment_label": "强烈看多", "top_bloggers": ["2001001007", "1729390673", "2001001001"], "related_tickers": []}, {"name": "AI", "mention_count": 9, "discussion_heat": 60.0, "consensus_degree": 100.0, "sentiment_score": 0.9979, "sentiment_label": "强烈看多", "top_bloggers": ["2001001007", "1729390673", "2001001001"], "related_tickers": []}, {"name": "白酒", "mention_count": 7, "discussion_heat": 46.7, "consensus_degree": 100.0, "sentiment_score": -0.9904, "sentiment_label": "强烈看空", "top_bloggers": ["1729390673", "2001001001", "2001001003"], "related_tickers": ["五粮液", "贵州茅台"]}, {"name": "医药", "mention_count": 7, "discussion_heat": 46.7, "consensus_degree": 100.0, "sentiment_score": 1.0, "sentiment_label": "强烈看多", "top_bloggers": ["2001001007", "1729390673", "2001001002"], "related_tickers": ["药明康德", "恒瑞医药"]}, {"name": "光伏", "mention_count": 7, "discussion_heat": 46.7, "consensus_degree": 100.0, "sentiment_score": -0.9994, "sentiment_label": "强烈看空", "top_bloggers": ["1729390673", "2001001001", "2001001002"], "related_tickers": ["通威股份", "隆基绿能"]}, {"name": "芯片", "mention_count": 7, "discussion_heat": 46.7, "consensus_degree": 100.0, "sentiment_score": 0.2682, "sentiment_label": "看多", "top_bloggers": ["2001001007", "2001001001", "2001001002"], "related_tickers": ["中微公司", "北方华创"]}, {"name": "银行", "mention_count": 6, "discussion_heat": 40.0, "consensus_degree": 100.0, "sentiment_score": 0.9982, "sentiment_label": "强烈看多", "top_bloggers": ["1729390673", "2001001003", "2001001004"], "related_tickers": []}, {"name": "科技", "mention_count": 6, "discussion_heat": 40.0, "consensus_degree": 100.0, "sentiment_score": 0.0229, "sentiment_label": "中性", "top_bloggers": ["2001001001", "2001001002", "2001001003"], "related_tickers": []}], "tickers": [{"name": "宁德时代", "mention_count": 8, "sentiment_score": 0.3269, "blogger_consensus": 100.0, "sentiment_label": "看多"}, {"name": "中芯国际", "mention_count": 8, "sentiment_score": 0.3269, "blogger_consensus": 100.0, "sentiment_label": "看多"}, {"name": "五粮液", "mention_count": 7, "sentiment_score": -0.9904, "blogger_consensus": 100.0, "sentiment_label": "强烈看空"}, {"name": "贵州茅台", "mention_count": 7, "sentiment_score": -0.9904, "blogger_consensus": 100.0, "sentiment_label": "强烈看空"}, {"name": "药明康德", "mention_count": 7, "sentiment_score": 1.0, "blogger_consensus": 100.0, "sentiment_label": "强烈看多"}, {"name": "恒瑞医药", "mention_count": 7, "sentiment_score": 1.0, "blogger_consensus": 100.0, "sentiment_label": "强烈看多"}, {"name": "通威股份", "mention_count": 7, "sentiment_score": -0.9994, "blogger_consensus": 100.0, "sentiment_label": "强烈看空"}, {"name": "隆基绿能", "mention_count": 7, "sentiment_score": -0.9994, "blogger_consensus": 100.0, "sentiment_label": "强烈看空"}, {"name": "中微公司", "mention_count": 7, "sentiment_score": 0.2682, "blogger_consensus": 100.0, "sentiment_label": "看多"}, {"name": "北方华创", "mention_count": 7, "sentiment_score": 0.2682, "blogger_consensus": 100.0, "sentiment_label": "看多"}], "quant": {"blogger_sentiment_index": 29.2, "market_heat_index": 70.4, "consensus_index": 19.5, "sentiment_momentum": 10.6, "risk_appetite_index": 48.9, "sector_rotation_signal": {"gaining": [], "losing": ["地产", "消费", "白酒"]}, "signal_summary": "博主情绪指数 29.2，市场情绪中性；市场热度 70.4 处于高位，关注度较高；共识指数 19.5，博主观点存在分歧；情绪动量 +10.6，情绪正在改善。"}};
+const DATA = __DATA_JSON__;
 const $=id=>document.getElementById(id);
 const fmt=n=>n.toLocaleString('zh-CN');
 const sentClass=s=>s>=0.15?'pos':(s<=-0.15?'neg':'neu');
@@ -152,3 +199,16 @@ renderBloggers();renderTrend();renderSectors();renderTickers();renderQuant();
 </script>
 </body>
 </html>
+"""
+
+
+def export(out_path="report.html", uids=None, auto_demo=True):
+    """生成静态 HTML 报告，返回 (输出路径, 数据字典)"""
+    from datetime import datetime
+    data = build_data(uids, auto_demo=auto_demo)
+    html = (HTML_TEMPLATE
+            .replace("__DATA_JSON__", json.dumps(data, ensure_ascii=False))
+            .replace("__GEN_TIME__", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    return out_path, data
