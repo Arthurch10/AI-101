@@ -41,6 +41,24 @@ cp config/config.example.json config/config.json
 2. F12 打开开发者工具 → Network → 任意请求 → 复制 Cookie 值
 3. 填入 `config/config.json` 的 `weibo_cookie` 字段
 
+## 网页界面 (推荐)
+
+在浏览器中选择博主、运行分析、查看可视化结果：
+
+```bash
+python3 webapp.py
+# 打开 http://127.0.0.1:5000
+```
+
+界面功能：
+
+- **勾选博主** — 点击卡片多选，支持全选/清空
+- **一键分析** — 运行 NLP 情绪分析，实时展示三大结论
+- **可视化** — 周度情绪趋势折线图 (Chart.js)、板块/个股热度与共识度进度条、量化指标卡片
+- **量化指标** — BSI / MHI / CI / SM / RAI + 板块轮动 + 信号综述
+
+> 首次运行会自动加载演示数据；接入真实数据请在 `config/config.json` 配置微博 Cookie 并运行 `wft fetch`。
+
 ## 使用方法
 
 ### 博主管理
@@ -190,6 +208,9 @@ weibo-finance-tracker/
 │   ├── deep_analysis.py       # 深度语义分析 & 量化指标
 │   ├── report.py              # 深度分析报告渲染（CLI/脚本共用）
 │   └── demo.py                # 演示数据
+├── templates/
+│   └── index.html             # 网页界面
+├── webapp.py                  # Flask Web 服务
 ├── run_analysis.py            # 交互式深度分析脚本（等价 wft deep）
 ├── requirements.txt
 ├── pyproject.toml

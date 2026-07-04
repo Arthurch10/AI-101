@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>微博财经博主 · 深度情绪分析</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #1a2130; --panel2: #222b3d; --border: #2c3752;
+    --text: #e6ecf5; --muted: #8a97ad; --accent: #4f9dff;
+    --green: #2ecc71; --red: #ff5c5c; --yellow: #f2c94c; --magenta: #b06cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    padding: 20px 28px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(90deg, #16203a, #0f1420);
+  }
+  header h1 { margin: 0; font-size: 20px; }
+  header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 20px;
+  }
+  .card h2 { margin: 0 0 14px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .badge { font-size: 12px; color: var(--muted); font-weight: normal; }
+  .blogger-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .blogger {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; transition: .15s; user-select: none;
+  }
+  .blogger:hover { border-color: var(--accent); }
+  .blogger.sel { border-color: var(--accent); background: #23324e; }
+  .blogger input { accent-color: var(--accent); width: 16px; height: 16px; }
+  .blogger .name { font-weight: 600; }
+  .blogger .meta { font-size: 12px; color: var(--muted); }
+  .star { color: var(--yellow); }
+  .toolbar { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+  button {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 10px 18px; font-size: 14px; cursor: pointer; font-weight: 600;
+  }
+  button:hover { filter: brightness(1.1); }
+  button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .kpi { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .kpi .label { font-size: 12px; color: var(--muted); }
+  .kpi .val { font-size: 24px; font-weight: 700; margin-top: 4px; }
+  .kpi .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .bar-cell { display: flex; align-items: center; gap: 8px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--accent); min-width: 2px; }
+  .bar-bg { flex: 1; height: 8px; border-radius: 4px; background: var(--border); overflow: hidden; }
+  .tag { padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .neu { color: var(--yellow); }
+  .tag.pos { background: rgba(46,204,113,.15); }
+  .tag.neg { background: rgba(255,92,92,.15); }
+  .tag.neu { background: rgba(242,201,76,.15); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+  .summary { background: var(--panel2); border-left: 3px solid var(--green); padding: 12px 16px; border-radius: 6px; font-size: 14px; }
+  .rotation { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 10px; }
+  .disclaimer { color: var(--muted); font-size: 12px; margin-top: 8px; padding: 10px 14px; border: 1px dashed var(--border); border-radius: 8px; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #results { display: none; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📈 微博财经博主 · 深度情绪分析</h1>
+  <p>选择你关注的博主 → 情绪分析 → 市场走向 / 板块个股 / 量化指标</p>
+</header>
+
+<div class="wrap">
+  <!-- 博主选择 -->
+  <div class="card">
+    <h2>① 选择博主 <span class="badge" id="selInfo"></span></h2>
+    <div class="blogger-grid" id="bloggerGrid"></div>
+    <div class="toolbar">
+      <button class="ghost" id="selAll">全选</button>
+      <button class="ghost" id="selNone">清空</button>
+      <button id="runBtn">运行分析 →</button>
+    </div>
+  </div>
+
+  <!-- 结果 -->
+  <div id="results">
+    <!-- 市场走向 -->
+    <div class="card">
+      <h2>② 市场整体走向与热度 <span class="badge" id="trendMeta"></span></h2>
+      <div class="kpis" id="trendKpis"></div>
+      <div style="margin-top:18px;"><canvas id="trendChart" height="90"></canvas></div>
+    </div>
+
+    <!-- 板块 & 个股 -->
+    <div class="grid2">
+      <div class="card">
+        <h2>③ 板块讨论度 · 共识 · 情绪</h2>
+        <table><thead><tr><th>板块</th><th>提及</th><th>讨论热度</th><th>共识度</th><th>情绪</th></tr></thead>
+          <tbody id="sectorRows"></tbody></table>
+      </div>
+      <div class="card">
+        <h2>④ 个股讨论度 · 情绪 · 共识</h2>
+        <table><thead><tr><th>个股</th><th>提及</th><th>情绪分</th><th>博主共识</th><th>情绪</th></tr></thead>
+          <tbody id="tickerRows"></tbody></table>
+      </div>
+    </div>
+
+    <!-- 量化指标 -->
+    <div class="card">
+      <h2>⑤ 量化参考指标</h2>
+      <div class="kpis" id="quantKpis"></div>
+      <div class="rotation" id="rotation"></div>
+      <div class="summary" id="signalSummary" style="margin-top:14px;"></div>
+      <div class="disclaimer">⚠️ 本报告基于微博财经博主观点的 NLP 语义与情绪分析生成，所有指标仅供参考，不构成投资建议。投资有风险，入市需谨慎。</div>
+    </div>
+  </div>
+</div>
+
+<script>
+let bloggers = [];
+const selected = new Set();
+let trendChart = null;
+
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('zh-CN');
+
+function sentClass(s) { return s >= 0.15 ? 'pos' : (s <= -0.15 ? 'neg' : 'neu'); }
+
+async function loadBloggers() {
+  const res = await fetch('/api/bloggers');
+  bloggers = await res.json();
+  const grid = $('bloggerGrid');
+  grid.innerHTML = '';
+  bloggers.forEach(b => {
+    const div = document.createElement('div');
+    div.className = 'blogger';
+    div.dataset.uid = b.uid;
+    div.innerHTML = `
+      <input type="checkbox">
+      <div>
+        <div class="name">${b.screen_name} ${b.manual_selected ? '<span class="star">★</span>' : ''}</div>
+        <div class="meta">${fmt(b.followers_count)} 粉丝 · ${b.verified_reason || '—'} · ${b.post_count} 帖</div>
+      </div>`;
+    div.addEventListener('click', () => toggle(b.uid, div));
+    grid.appendChild(div);
+    if (b.manual_selected) toggle(b.uid, div);
+  });
+  updateSelInfo();
+}
+
+function toggle(uid, div) {
+  if (selected.has(uid)) { selected.delete(uid); div.classList.remove('sel'); div.querySelector('input').checked = false; }
+  else { selected.add(uid); div.classList.add('sel'); div.querySelector('input').checked = true; }
+  updateSelInfo();
+}
+
+function updateSelInfo() { $('selInfo').textContent = `已选 ${selected.size} / ${bloggers.length}`; }
+
+$('selAll').onclick = () => document.querySelectorAll('.blogger').forEach(d => { if (!selected.has(d.dataset.uid)) toggle(d.dataset.uid, d); });
+$('selNone').onclick = () => document.querySelectorAll('.blogger').forEach(d => { if (selected.has(d.dataset.uid)) toggle(d.dataset.uid, d); });
+
+$('runBtn').onclick = async () => {
+  const btn = $('runBtn');
+  const uids = selected.size ? [...selected] : bloggers.map(b => b.uid);
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 分析中…';
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ uids })
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    render(data);
+    $('results').style.display = 'block';
+    $('results').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) { alert('分析失败: ' + e); }
+  finally { btn.disabled = false; btn.textContent = '运行分析 →'; }
+};
+
+function render(d) {
+  renderTrend(d.trend, d.selected);
+  renderSectors(d.sectors);
+  renderTickers(d.tickers);
+  renderQuant(d.quant);
+}
+
+function renderTrend(t, sel) {
+  $('trendMeta').textContent = `${sel.map(s => s.screen_name).join('、')}`;
+  const dirColor = { '上行': 'pos', '下行': 'neg', '震荡': 'neu' }[t.trend_direction];
+  const momClass = t.momentum >= 0 ? 'pos' : 'neg';
+  $('trendKpis').innerHTML = `
+    ${kpi('市场走向', `<span class="${dirColor}">${t.trend_direction}</span>`, '整体情绪方向')}
+    ${kpi('趋势强度', t.trend_strength, '0-100')}
+    ${kpi('市场热度', t.heat_index, '0-100 互动+频率')}
+    ${kpi('情绪动量', `<span class="${momClass}">${t.momentum >= 0 ? '+' : ''}${t.momentum}</span>`, '周环比')}
+    ${kpi('量能信号', t.volume_signal, '发帖频率')}
+    ${kpi('平均情绪', `<span class="${sentClass(t.avg_sentiment)}">${t.avg_sentiment >= 0 ? '+' : ''}${t.avg_sentiment.toFixed(3)}</span>`, `${t.total_posts} 帖 · ${fmt(t.total_engagement)} 互动`)}`;
+
+  const labels = t.weekly_sentiment_trend.map(x => x[0]);
+  const vals = t.weekly_sentiment_trend.map(x => x[1]);
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart($('trendChart'), {
+    type: 'line',
+    data: { labels, datasets: [{
+      label: '周度平均情绪', data: vals, borderColor: '#4f9dff',
+      backgroundColor: 'rgba(79,157,255,.15)', fill: true, tension: .35,
+      pointRadius: 5, pointBackgroundColor: '#4f9dff'
+    }]},
+    options: {
+      plugins: { legend: { labels: { color: '#8a97ad' } } },
+      scales: {
+        y: { min: -1, max: 1, ticks: { color: '#8a97ad' }, grid: { color: '#2c3752' } },
+        x: { ticks: { color: '#8a97ad' }, grid: { color: '#2c3752' } }
+      }
+    }
+  });
+}
+
+function kpi(label, val, hint) {
+  return `<div class="kpi"><div class="label">${label}</div><div class="val">${val}</div><div class="hint">${hint || ''}</div></div>`;
+}
+
+function barCell(v) {
+  return `<div class="bar-cell"><div class="bar-bg"><div class="bar" style="width:${v}%"></div></div><span>${Math.round(v)}</span></div>`;
+}
+
+function renderSectors(sectors) {
+  $('sectorRows').innerHTML = sectors.map(s => `
+    <tr><td><b>${s.name}</b></td><td>${s.mention_count}</td>
+    <td style="min-width:120px">${barCell(s.discussion_heat)}</td>
+    <td style="min-width:120px">${barCell(s.consensus_degree)}</td>
+    <td><span class="tag ${sentClass(s.sentiment_score)}">${s.sentiment_label}</span> <span class="${sentClass(s.sentiment_score)}">${s.sentiment_score >= 0 ? '+' : ''}${s.sentiment_score.toFixed(2)}</span></td></tr>`).join('');
+}
+
+function renderTickers(tickers) {
+  $('tickerRows').innerHTML = tickers.map(t => `
+    <tr><td><b>${t.name}</b></td><td>${t.mention_count}</td>
+    <td class="${sentClass(t.sentiment_score)}">${t.sentiment_score >= 0 ? '+' : ''}${t.sentiment_score.toFixed(2)}</td>
+    <td style="min-width:120px">${barCell(t.blogger_consensus)}</td>
+    <td><span class="tag ${sentClass(t.sentiment_score)}">${t.sentiment_label}</span></td></tr>`).join('');
+}
+
+function renderQuant(q) {
+  const bsiClass = q.blogger_sentiment_index >= 30 ? 'pos' : (q.blogger_sentiment_index <= -30 ? 'neg' : 'neu');
+  const smClass = q.sentiment_momentum >= 0 ? 'pos' : 'neg';
+  $('quantKpis').innerHTML = `
+    ${kpi('博主情绪指数 BSI', `<span class="${bsiClass}">${q.blogger_sentiment_index >= 0 ? '+' : ''}${q.blogger_sentiment_index}</span>`, '-100~100')}
+    ${kpi('市场热度指数 MHI', q.market_heat_index, '0~100')}
+    ${kpi('共识指数 CI', q.consensus_index, '0~100 越高越一致')}
+    ${kpi('情绪动量 SM', `<span class="${smClass}">${q.sentiment_momentum >= 0 ? '+' : ''}${q.sentiment_momentum}</span>`, '正=改善')}
+    ${kpi('风险偏好 RAI', q.risk_appetite_index, '0~100 看多占比')}`;
+
+  const rot = q.sector_rotation_signal;
+  $('rotation').innerHTML =
+    (rot.gaining.length ? `<div><b class="pos">▲ 升温:</b> ${rot.gaining.join('、')}</div>` : '') +
+    (rot.losing.length ? `<div><b class="neg">▼ 降温:</b> ${rot.losing.join('、')}</div>` : '');
+  $('signalSummary').textContent = '📊 ' + q.signal_summary;
+}
+
+loadBloggers();
+</script>
+</body>
+</html>
