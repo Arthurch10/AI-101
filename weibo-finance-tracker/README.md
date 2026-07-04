@@ -59,6 +59,18 @@ python3 webapp.py
 
 > 首次运行会自动加载演示数据；接入真实数据请在 `config/config.json` 配置微博 Cookie 并运行 `wft fetch`。
 
+## 离线 HTML 报告 (无需服务器)
+
+若无法访问本地服务器端口，可导出一个**完全自包含的静态 HTML 报告**，用浏览器直接打开即可查看全部可视化结果（无任何外部依赖，SVG 内联趋势图）：
+
+```bash
+python3 export_report.py            # 生成 report.html
+python3 export_report.py my.html    # 指定输出文件名
+```
+
+生成的 `report.html` 可直接双击打开，或通过在线预览查看：
+`https://htmlpreview.github.io/?<report.html 的 raw 链接>`
+
 ## 使用方法
 
 ### 博主管理
