@@ -114,12 +114,32 @@ def api_ranking():
         blogger = db.get_blogger(r["blogger_uid"])
         result.append({
             "rank": i,
+            "uid": r["blogger_uid"],
             "screen_name": blogger["screen_name"] if blogger else r["blogger_uid"],
             "score": r["score"],
             "accuracy_score": r["accuracy_score"],
             "influence_score": r["influence_score"],
             "activity_score": r["activity_score"],
             "consistency_score": r["consistency_score"],
+        })
+    return jsonify(result)
+
+
+@app.route("/api/top3")
+def api_top3():
+    """返回优选 TOP3 博主（手动优先 + 算法补齐）"""
+    _ensure_data()
+    ranker = BloggerRanker()
+    top3 = ranker.get_selected_top3()
+    result = []
+    for i, r in enumerate(top3, 1):
+        blogger = db.get_blogger(r["blogger_uid"])
+        result.append({
+            "rank": i,
+            "uid": r["blogger_uid"],
+            "screen_name": blogger["screen_name"] if blogger else r["blogger_uid"],
+            "score": r["score"],
+            "source": "手动筛选" if (blogger and blogger.get("manual_selected")) else "算法推荐",
         })
     return jsonify(result)
 

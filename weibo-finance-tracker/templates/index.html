@@ -115,8 +115,20 @@
     <div class="toolbar">
       <button class="ghost" id="selAll">全选</button>
       <button class="ghost" id="selNone">清空</button>
+      <button class="ghost" id="rankBtn">🏆 博主排名</button>
       <button id="runBtn">运行分析 →</button>
     </div>
+  </div>
+
+  <!-- 博主排名 -->
+  <div class="card" id="rankCard" style="display:none;">
+    <h2>🏆 博主排名 <span class="badge">算法多维度评分 · 优选 TOP3</span></h2>
+    <div id="top3" class="kpis" style="margin-bottom:16px;"></div>
+    <table>
+      <thead><tr><th>#</th><th>博主</th><th>综合分</th><th>准确率</th><th>影响力</th><th>活跃度</th><th>一致性</th><th></th></tr></thead>
+      <tbody id="rankRows"></tbody>
+    </table>
+    <div class="disclaimer">评分权重：准确率 35% · 影响力 25% · 活跃度 20% · 一致性 20%。优选 TOP3 = 手动筛选优先，不足由算法补齐。</div>
   </div>
 
   <!-- 结果 -->
@@ -372,6 +384,36 @@ $('refreshBtn').onclick = async () => {
     }
   } catch (e) { showMsg('抓取失败: ' + e, 'err'); }
   finally { btn.disabled = false; btn.textContent = '🔄 抓取最新微博'; }
+};
+
+$('rankBtn').onclick = async () => {
+  const btn = $('rankBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 排名中…';
+  try {
+    const [rankRes, top3Res] = await Promise.all([
+      fetch('/api/ranking?top=10').then(r => r.json()),
+      fetch('/api/top3').then(r => r.json())
+    ]);
+    $('top3').innerHTML = top3Res.map(t => {
+      const cls = t.source === '手动筛选' ? 'star' : 'pos';
+      return kpi(`#${t.rank} ${t.screen_name}`, `<span class="${cls}">${t.score.toFixed(3)}</span>`, t.source);
+    }).join('');
+    $('rankRows').innerHTML = rankRes.map(r => `
+      <tr><td><b>${r.rank}</b></td><td><b>${r.screen_name}</b></td>
+      <td class="pos"><b>${r.score.toFixed(3)}</b></td>
+      <td>${r.accuracy_score.toFixed(3)}</td>
+      <td>${r.influence_score.toFixed(3)}</td>
+      <td>${r.activity_score.toFixed(3)}</td>
+      <td>${r.consistency_score.toFixed(3)}</td>
+      <td><button class="ghost pickBtn" data-uid="${r.uid || ''}" data-name="${r.screen_name}" style="padding:4px 10px;font-size:12px;">选入分析</button></td></tr>`).join('');
+    $('rankCard').style.display = 'block';
+    document.querySelectorAll('.pickBtn').forEach(b => b.addEventListener('click', () => {
+      const div = document.querySelector(`.blogger[data-uid="${b.dataset.uid}"]`);
+      if (div && !selected.has(b.dataset.uid)) { toggle(b.dataset.uid, div); showMsg(`已选入分析：${b.dataset.name}`, 'ok'); }
+    }));
+    $('rankCard').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) { showMsg('排名失败: ' + e, 'err'); }
+  finally { btn.disabled = false; btn.textContent = '🏆 博主排名'; }
 };
 
 loadBloggers();
