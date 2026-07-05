@@ -162,6 +162,26 @@
       <div class="summary" id="signalSummary" style="margin-top:14px;"></div>
       <div class="disclaimer">⚠️ 本报告基于微博财经博主观点的 NLP 语义与情绪分析生成，所有指标仅供参考，不构成投资建议。投资有风险，入市需谨慎。</div>
     </div>
+
+    <!-- 投资建议 -->
+    <div class="card">
+      <h2>⑦ 投资参考建议 <span class="badge" id="adviceMeta"></span></h2>
+      <div class="toolbar" style="margin-bottom:12px;">
+        <label style="font-size:13px;color:var(--muted);">时间范围
+          <select id="adviceDays" style="background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:6px 10px;">
+            <option value="7">近 7 天</option>
+            <option value="14">近 14 天</option>
+            <option value="30" selected>近 30 天</option>
+          </select>
+        </label>
+        <label style="font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="adviceTop3"> 仅基于优选 TOP3
+        </label>
+        <button id="adviceBtn">💡 生成投资建议</button>
+      </div>
+      <div id="adviceConsensus" class="kpis" style="margin-bottom:12px;"></div>
+      <div class="summary" id="adviceBody" style="white-space:pre-wrap;display:none;"></div>
+    </div>
   </div>
 </div>
 
@@ -414,6 +434,34 @@ $('rankBtn').onclick = async () => {
     $('rankCard').scrollIntoView({ behavior: 'smooth' });
   } catch (e) { showMsg('排名失败: ' + e, 'err'); }
   finally { btn.disabled = false; btn.textContent = '🏆 博主排名'; }
+};
+
+$('adviceBtn').onclick = async () => {
+  const btn = $('adviceBtn');
+  const uids = selected.size ? [...selected] : bloggers.map(b => b.uid);
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 生成中…';
+  try {
+    const res = await fetch('/api/advice', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ uids, days: +$('adviceDays').value, top3_only: $('adviceTop3').checked })
+    });
+    const d = await res.json();
+    if (d.error) { showMsg(d.error, 'err'); return; }
+    const c = d.consensus;
+    const ccls = c.consensus.includes('多') ? 'pos' : (c.consensus.includes('空') ? 'neg' : 'neu');
+    $('adviceMeta').textContent = `${d.generated_at} · ${c.total_opinions} 条观点`;
+    $('adviceConsensus').innerHTML =
+      kpi('市场共识', `<span class="${ccls}">${c.consensus}</span>`, '多空聚合') +
+      kpi('看多占比', `<span class="pos">${c.bullish_pct}%</span>`, '') +
+      kpi('看空占比', `<span class="neg">${c.bearish_pct}%</span>`, '') +
+      kpi('平均情绪', `<span class="${sentClass(c.avg_sentiment)}">${c.avg_sentiment>=0?'+':''}${c.avg_sentiment.toFixed(3)}</span>`, '') +
+      kpi('热门板块', (c.hot_sectors.slice(0,3).map(s=>s[0]).join('、')||'—'), c.hot_sectors.slice(0,3).map(s=>`${s[0]}(${s[1]})`).join(' ')) +
+      kpi('关注个股', (c.hot_tickers.slice(0,3).map(t=>t[0]).join('、')||'—'), c.hot_tickers.slice(0,3).map(t=>`${t[0]}(${t[1]})`).join(' '));
+    $('adviceBody').style.display = 'block';
+    $('adviceBody').textContent = d.advice;
+    $('adviceBody').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) { showMsg('生成失败: ' + e, 'err'); }
+  finally { btn.disabled = false; btn.textContent = '💡 生成投资建议'; }
 };
 
 loadBloggers();

@@ -20,6 +20,7 @@ from src.scraper import WeiboScraper
 from src.analyzer import OpinionAnalyzer
 from src.ranker import BloggerRanker
 from src.deep_analysis import DeepAnalyzer
+from src.advisor import InvestmentAdvisor
 
 app = Flask(__name__)
 
@@ -142,6 +143,48 @@ def api_top3():
             "source": "手动筛选" if (blogger and blogger.get("manual_selected")) else "算法推荐",
         })
     return jsonify(result)
+
+
+@app.route("/api/advice", methods=["POST"])
+def api_advice():
+    """生成投资参考建议（聚合博主观点）"""
+    _ensure_data()
+    data = request.get_json(silent=True) or {}
+    uids = data.get("uids") or None
+    days = int(data.get("days", 7))
+    top3_only = bool(data.get("top3_only"))
+
+    if top3_only:
+        ranker = BloggerRanker()
+        uids = [r["blogger_uid"] for r in ranker.get_selected_top3()]
+
+    # 确保帖子已完成情绪分析
+    OpinionAnalyzer().analyze_unprocessed(use_llm=False)
+
+    cfg = load_config()
+    advisor = InvestmentAdvisor(
+        cfg.get("openai_api_key", ""),
+        cfg.get("llm_base_url", ""),
+        cfg.get("llm_model", ""),
+    )
+    report = advisor.generate_advice(uids, days)
+    if "error" in report:
+        return jsonify({"error": report["error"]}), 400
+
+    consensus = report["market_consensus"]
+    return jsonify({
+        "generated_at": report["generated_at"],
+        "advice": report["advice"],
+        "consensus": {
+            "consensus": consensus["consensus"],
+            "bullish_pct": consensus["bullish_pct"],
+            "bearish_pct": consensus["bearish_pct"],
+            "avg_sentiment": consensus["avg_sentiment"],
+            "hot_sectors": consensus["hot_sectors"][:6],
+            "hot_tickers": consensus["hot_tickers"][:6],
+            "total_opinions": consensus["total_opinions"],
+        },
+    })
 
 
 @app.route("/api/search_bloggers")
