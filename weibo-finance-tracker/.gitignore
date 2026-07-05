@@ -10,5 +10,6 @@ config/config.json
 data/*.db
 data/*.db-wal
 data/*.db-shm
+data/*.log
 .venv/
 venv/

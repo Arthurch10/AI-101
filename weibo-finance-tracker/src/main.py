@@ -551,5 +551,46 @@ def run_pipeline(pages, llm, cookie):
         console.print(f"[yellow]{report['error']}[/]")
 
 
+# ===================================================================
+# 定时任务
+# ===================================================================
+
+@cli.command("schedule")
+@click.option("--interval", type=int, default=None, help="每 N 小时执行一次")
+@click.option("--at", "at_time", default=None, help="每天在 HH:MM 执行 (如 09:00)")
+@click.option("--pages", default=3, help="每次抓取页数")
+@click.option("--llm", is_flag=True, help="使用 LLM 分析")
+@click.option("--cookie", default="", help="微博 Cookie")
+@click.option("--once", is_flag=True, help="仅立即执行一次后退出 (不进入循环)")
+def schedule_cmd(interval, at_time, pages, llm, cookie, once):
+    """定时后台任务: 周期性抓取 → 分析 → 更新排名"""
+    from . import scheduler
+
+    config = load_config()
+    cookie = cookie or config.get("weibo_cookie", "")
+
+    if once:
+        console.print("[bold]执行单次任务...[/]")
+        result = scheduler.run_job(cookie=cookie, pages=pages, use_llm=llm)
+        console.print(Panel(
+            f"[green]✓[/] 抓取 {result['fetched']} 条 · "
+            f"分析 {result['analyzed']} 条 · 排名 {result['ranked']} 位博主",
+            title="任务完成", border_style="green",
+        ))
+        return
+
+    plan = f"每天 {at_time}" if at_time else f"每 {interval or 24} 小时"
+    console.print(Panel.fit(
+        f"[bold cyan]定时任务已启动[/]  {plan}\n"
+        f"日志: data/scheduler.log  ·  Ctrl+C 退出",
+        border_style="cyan",
+    ))
+    try:
+        scheduler.start(interval_hours=interval, at_time=at_time,
+                        cookie=cookie, pages=pages, use_llm=llm)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]定时任务已停止[/]")
+
+
 if __name__ == "__main__":
     cli()

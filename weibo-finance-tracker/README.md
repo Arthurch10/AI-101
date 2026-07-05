@@ -191,6 +191,22 @@ wft run
 wft run --llm
 ```
 
+### 定时后台任务
+
+周期性自动抓取最新微博、分析观点、更新排名，无需手动操作：
+
+```bash
+wft schedule --once            # 立即执行一次（用于测试）
+wft schedule --interval 6      # 每 6 小时执行
+wft schedule --at 09:00        # 每天 09:00 执行
+wft schedule --at 09:00 --llm  # 定时并启用 LLM 分析
+```
+
+- 启动后会先立即执行一次，再进入等待循环（`Ctrl+C` 退出）
+- 每次执行的记录写入 `data/scheduler.log`
+- 建议在服务器上配合 `nohup`/`systemd`/`screen` 后台常驻：
+  `nohup wft schedule --at 09:00 > /dev/null 2>&1 &`
+
 ## 排名算法
 
 博主综合评分由四个维度加权计算：
@@ -230,6 +246,7 @@ weibo-finance-tracker/
 │   ├── deep_analysis.py       # 深度语义分析 & 量化指标
 │   ├── report.py              # 深度分析报告渲染（CLI/脚本共用）
 │   ├── html_report.py         # 静态 HTML 报告导出
+│   ├── scheduler.py           # 定时任务调度
 │   └── demo.py                # 演示数据
 ├── templates/
 │   └── index.html             # 网页界面
