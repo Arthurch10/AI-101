@@ -494,6 +494,61 @@ def export_report(output, uids, demo):
 
 
 # ===================================================================
+# 观点回测
+# ===================================================================
+
+@cli.command("backtest")
+@click.option("--horizon", default=5, help="观点发布后检验涨跌的天数")
+@click.option("--threshold", default=0.02, help="判定涨跌的收益率阈值 (默认 0.02)")
+@click.option("--demo", is_flag=True, help="使用模拟行情 (无网络/演示时)")
+def backtest_cmd(horizon, threshold, demo):
+    """用真实行情回测博主历史观点准确率"""
+    from .backtest import Backtester
+    from .demo import load_demo_data
+
+    console.print(Panel.fit(
+        f"[bold cyan]观点回测[/]  检验窗口 {horizon} 天 · 阈值 ±{threshold:.0%}"
+        f"{' · 模拟行情' if demo else ' · 真实行情'}",
+        border_style="cyan",
+    ))
+
+    # 演示模式下自动准备数据
+    if demo and not db.get_all_bloggers():
+        console.print("[dim]加载演示数据...[/]")
+        load_demo_data()
+
+    # 确保帖子已完成情绪分析（回测依赖观点方向/个股）
+    OpinionAnalyzer().analyze_unprocessed(use_llm=False)
+
+    console.print("[dim]正在拉取行情并回测（真实行情较慢，请稍候）...[/]")
+
+    bt = Backtester(horizon_days=horizon, threshold=threshold, demo=demo)
+    results = bt.backtest_all()
+
+    rated = [r for r in results if r["accuracy"] is not None]
+    if not rated:
+        console.print("[yellow]没有可回测的观点。需要博主观点包含 6 位股票代码，"
+                      "且有对应行情数据。可加 --demo 用模拟行情演示。[/]")
+        return
+
+    rated.sort(key=lambda r: r["accuracy"], reverse=True)
+    table = Table(title="博主观点准确率回测")
+    table.add_column("博主", style="bold")
+    table.add_column("准确率", justify="right", style="bold green")
+    table.add_column("正确/评估", justify="right")
+    table.add_column("样本", justify="right")
+    for r in rated:
+        table.add_row(
+            r["screen_name"],
+            f"{r['accuracy']:.1%}",
+            f"{r['correct']}/{r['evaluated']}",
+            str(r["evaluated"]),
+        )
+    console.print(table)
+    console.print("[dim]回测准确率已写入数据库，将用于 wft rank 的准确率维度。[/]")
+
+
+# ===================================================================
 # 一键执行
 # ===================================================================
 

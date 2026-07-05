@@ -123,6 +123,11 @@
   <!-- 博主排名 -->
   <div class="card" id="rankCard" style="display:none;">
     <h2>🏆 博主排名 <span class="badge">算法多维度评分 · 优选 TOP3</span></h2>
+    <div class="toolbar" style="margin-bottom:12px;">
+      <button class="ghost" id="backtestBtn">📊 行情回测准确率</button>
+      <span class="badge" id="backtestMeta"></span>
+    </div>
+    <div id="backtestRows"></div>
     <div id="top3" class="kpis" style="margin-bottom:16px;"></div>
     <table>
       <thead><tr><th>#</th><th>博主</th><th>综合分</th><th>准确率</th><th>影响力</th><th>活跃度</th><th>一致性</th><th></th></tr></thead>
@@ -462,6 +467,26 @@ $('adviceBtn').onclick = async () => {
     $('adviceBody').scrollIntoView({ behavior: 'smooth' });
   } catch (e) { showMsg('生成失败: ' + e, 'err'); }
   finally { btn.disabled = false; btn.textContent = '💡 生成投资建议'; }
+};
+
+$('backtestBtn').onclick = async () => {
+  const btn = $('backtestBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 回测中…';
+  try {
+    const res = await fetch('/api/backtest', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ horizon: 5, threshold: 0.02, demo: true })
+    });
+    const d = await res.json();
+    if (!d.results || !d.results.length) { showMsg('无可回测观点（需含 6 位股票代码）', 'err'); return; }
+    $('backtestMeta').textContent = `窗口 ${d.horizon} 天 · 阈值 ±${(d.threshold*100).toFixed(0)}%${d.demo ? ' · 模拟行情' : ' · 真实行情'}`;
+    $('backtestRows').innerHTML = `<table><thead><tr><th>博主</th><th>准确率</th><th>正确/评估</th></tr></thead><tbody>` +
+      d.results.map(r => {
+        const cls = r.accuracy >= 0.6 ? 'pos' : (r.accuracy < 0.4 ? 'neg' : 'neu');
+        return `<tr><td><b>${r.screen_name}</b></td><td class="${cls}"><b>${(r.accuracy*100).toFixed(1)}%</b></td><td>${r.correct}/${r.evaluated}</td></tr>`;
+      }).join('') + `</tbody></table><div class="disclaimer">回测已写入准确率维度，点击「🏆 博主排名」可看到排名随之更新。</div>`;
+  } catch (e) { showMsg('回测失败: ' + e, 'err'); }
+  finally { btn.disabled = false; btn.textContent = '📊 行情回测准确率'; }
 };
 
 loadBloggers();

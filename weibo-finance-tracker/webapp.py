@@ -187,6 +187,32 @@ def api_advice():
     })
 
 
+@app.route("/api/backtest", methods=["POST"])
+def api_backtest():
+    """用行情回测博主观点准确率，结果写入并用于排名"""
+    _ensure_data()
+    data = request.get_json(silent=True) or {}
+    horizon = int(data.get("horizon", 5))
+    threshold = float(data.get("threshold", 0.02))
+    use_demo = bool(data.get("demo", True))  # 网页默认用模拟行情（真实接口较慢）
+
+    OpinionAnalyzer().analyze_unprocessed(use_llm=False)
+
+    from src.backtest import Backtester
+    bt = Backtester(horizon_days=horizon, threshold=threshold, demo=use_demo)
+    results = bt.backtest_all()
+    rated = [r for r in results if r["accuracy"] is not None]
+    rated.sort(key=lambda r: r["accuracy"], reverse=True)
+    return jsonify({
+        "horizon": horizon, "threshold": threshold, "demo": use_demo,
+        "results": [
+            {"screen_name": r["screen_name"], "accuracy": r["accuracy"],
+             "correct": r["correct"], "evaluated": r["evaluated"]}
+            for r in rated
+        ],
+    })
+
+
 @app.route("/api/search_bloggers")
 def api_search_bloggers():
     """按昵称搜索博主，返回候选列表"""

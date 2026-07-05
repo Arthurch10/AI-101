@@ -74,6 +74,15 @@ def init_db():
         FOREIGN KEY (blogger_uid) REFERENCES bloggers(uid)
     );
 
+    CREATE TABLE IF NOT EXISTS backtest (
+        blogger_uid     TEXT PRIMARY KEY,
+        accuracy        REAL,
+        evaluated       INTEGER DEFAULT 0,
+        correct         INTEGER DEFAULT 0,
+        updated_at      TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (blogger_uid) REFERENCES bloggers(uid)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_posts_blogger   ON posts(blogger_uid);
     CREATE INDEX IF NOT EXISTS idx_posts_created    ON posts(created_at);
     CREATE INDEX IF NOT EXISTS idx_opinions_blogger ON opinions(blogger_uid);
@@ -230,6 +239,24 @@ def get_latest_rankings(top_n=10):
     """, (top_n,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def save_backtest(uid, accuracy, evaluated, correct):
+    conn = get_connection()
+    conn.execute("""
+        INSERT OR REPLACE INTO backtest
+            (blogger_uid, accuracy, evaluated, correct, updated_at)
+        VALUES (?, ?, ?, ?, datetime('now'))
+    """, (uid, accuracy, evaluated, correct))
+    conn.commit()
+    conn.close()
+
+
+def get_backtest(uid):
+    conn = get_connection()
+    row = conn.execute("SELECT * FROM backtest WHERE blogger_uid = ?", (uid,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
 def get_blogger_post_count(uid):

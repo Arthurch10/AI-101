@@ -81,14 +81,19 @@ class BloggerRanker:
         """
         观点准确率评分
 
-        简化实现: 基于观点置信度和市场验证的加权平均
-        完整版需要接入行情数据对比历史观点
+        优先使用真实行情回测结果 (wft backtest)；
+        无回测数据时回退到观点置信度代理指标。
         """
+        bt = db.get_backtest(blogger["uid"])
+        if bt and bt.get("accuracy") is not None and bt.get("evaluated", 0) >= 3:
+            # 有足够样本的真实回测准确率
+            return bt["accuracy"]
+
         opinions = db.get_opinions(blogger["uid"], limit=50)
         if not opinions:
             return 0.5
 
-        # 使用分析时的 confidence 作为代理指标
+        # 回退: 使用分析时的 confidence 作为代理指标
         confidences = [o["confidence"] for o in opinions if o["confidence"]]
         if not confidences:
             return 0.5
