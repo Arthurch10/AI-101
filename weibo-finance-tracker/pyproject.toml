@@ -27,8 +27,15 @@ dependencies = [
     "flask>=3.0.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
 [project.scripts]
 wft = "src.main:cli"
 
 [tool.setuptools]
 packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -269,10 +269,21 @@ weibo-finance-tracker/
 │   └── index.html             # 网页界面
 ├── webapp.py                  # Flask Web 服务
 ├── run_analysis.py            # 交互式深度分析脚本（等价 wft deep）
+├── export_report.py           # 静态报告导出脚本（等价 wft export）
+├── tests/                     # pytest 测试套件
 ├── requirements.txt
 ├── pyproject.toml
 └── README.md
 ```
+
+## 测试
+
+```bash
+pip install -e ".[dev]"    # 安装测试依赖
+pytest                      # 运行全部测试
+```
+
+测试覆盖数据库 CRUD、NLP 分析、行情/回测判定、深度分析指标、排名算法，全部离线运行（不依赖网络）。
 
 ## 风险提示
 

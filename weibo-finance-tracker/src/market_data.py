@@ -69,8 +69,10 @@ class MarketData:
     def _demo_kline(self, code, datalen):
         """演示模式: 基于代码确定性生成价格序列（可复现）"""
         from datetime import datetime, timedelta
-        # 用代码字符和生成确定性种子
-        seed = sum(ord(ch) for ch in str(code))
+        # 位置加权的确定性种子（避免不同代码因字符和相同而碰撞）
+        seed = 0
+        for ch in str(code):
+            seed = (seed * 131 + ord(ch)) % 1_000_000
         base = 20 + seed % 80          # 基准价 20~100
         drift = ((seed % 7) - 3) * 0.002  # 每日漂移 -0.6%~+0.8%
         amp = 0.03 + (seed % 5) * 0.01    # 波动幅度
