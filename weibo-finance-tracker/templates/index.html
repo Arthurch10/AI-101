@@ -145,8 +145,13 @@
     <h2>🤖 AI 观点流 <span class="badge">每条微博的 AI 情绪/方向/板块解读</span></h2>
     <div class="toolbar" style="margin-bottom:12px;">
       <button class="ghost" id="feedBtn">🤖 加载 AI 观点流</button>
+      <button class="ghost feedFilter" data-view="" style="display:none;">全部</button>
+      <button class="ghost feedFilter" data-view="bullish" style="display:none;">看多</button>
+      <button class="ghost feedFilter" data-view="bearish" style="display:none;">看空</button>
+      <button class="ghost feedFilter" data-view="neutral" style="display:none;">中性</button>
       <span class="badge" id="feedMeta"></span>
     </div>
+    <div id="feedDigest" class="summary" style="display:none;margin-bottom:12px;"></div>
     <div id="feedList"></div>
   </div>
 
@@ -549,39 +554,65 @@ async function loadPresets() {
   });
 }
 
+let feedView = '';  // 当前方向筛选
+
+async function loadFeed() {
+  const uids = selected.size ? [...selected] : [];
+  const params = new URLSearchParams({ limit: '40' });
+  if (uids.length) params.set('uids', uids.join(','));
+  if (feedView) params.set('view', feedView);
+  const res = await fetch('/api/feed?' + params.toString());
+  const data = await res.json();
+  const { digest, items } = data;
+
+  // 研判摘要（始终基于全部方向）
+  if (digest && digest.text) {
+    $('feedDigest').style.display = 'block';
+    $('feedDigest').innerHTML = '🤖 <b>AI 研判</b>：' + digest.text;
+  }
+  document.querySelectorAll('.feedFilter').forEach(b => {
+    b.style.display = 'inline-block';
+    b.style.borderColor = (b.dataset.view === feedView) ? 'var(--accent)' : 'var(--border)';
+  });
+
+  if (!items.length) { $('feedList').innerHTML = '<div class="disclaimer">该方向暂无观点。</div>'; $('feedMeta').textContent = ''; return; }
+  const viewLabel = { bullish: '看多', bearish: '看空', neutral: '中性' };
+  const filterTxt = feedView ? (' · 筛选:' + viewLabel[feedView]) : '';
+  $('feedMeta').textContent = `${items.length} 条${uids.length ? '（选中博主）' : '（全部博主）'}` + filterTxt;
+  const viewCls = { bullish: 'bull', bearish: 'bear', neutral: 'neu' };
+  const viewTxt = { bullish: '看多', bearish: '看空', neutral: '中性' };
+  $('feedList').innerHTML = items.map(it => {
+    const vc = viewCls[it.market_view] || 'neu';
+    const sc = it.sentiment == null ? 'neu' : sentClass(it.sentiment);
+    const sectors = it.sectors.map(s => `<span class="chip sec">#${s}</span>`).join('');
+    const tickers = it.tickers.map(t => `<span class="chip tk">$${t}</span>`).join('');
+    const kw = it.keywords.map(k => `<span class="chip">${k}</span>`).join('');
+    return `<div class="feed-item ${vc}">
+      <div class="feed-head"><span class="who">${it.screen_name}</span><span class="when">${it.created_at}</span></div>
+      <div class="feed-content">${it.content}</div>
+      <div class="feed-ai">
+        <span class="tag ${sc}">${viewTxt[it.market_view]||'中性'}</span>
+        ${it.sentiment!=null?`<span class="${sc}">情绪 ${it.sentiment>=0?'+':''}${it.sentiment}</span>`:''}
+        <span class="when">置信 ${it.confidence}</span>
+        ${sectors}${tickers}${kw}
+        <span class="when">· 🔥${fmt(it.engagement)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 $('feedBtn').onclick = async () => {
   const btn = $('feedBtn');
-  const uids = selected.size ? [...selected] : [];
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 加载中…';
-  try {
-    const qs = uids.length ? ('?uids=' + uids.join(',') + '&limit=40') : '?limit=40';
-    const res = await fetch('/api/feed' + qs);
-    const items = await res.json();
-    if (!items.length) { showMsg('暂无观点数据', 'err'); return; }
-    $('feedMeta').textContent = `共 ${items.length} 条${uids.length ? '（选中博主）' : '（全部博主）'}`;
-    const viewCls = { bullish: 'bull', bearish: 'bear', neutral: 'neu' };
-    const viewTxt = { bullish: '看多', bearish: '看空', neutral: '中性' };
-    $('feedList').innerHTML = items.map(it => {
-      const vc = viewCls[it.market_view] || 'neu';
-      const sc = it.sentiment == null ? 'neu' : sentClass(it.sentiment);
-      const sectors = it.sectors.map(s => `<span class="chip sec">#${s}</span>`).join('');
-      const tickers = it.tickers.map(t => `<span class="chip tk">$${t}</span>`).join('');
-      const kw = it.keywords.map(k => `<span class="chip">${k}</span>`).join('');
-      return `<div class="feed-item ${vc}">
-        <div class="feed-head"><span class="who">${it.screen_name}</span><span class="when">${it.created_at}</span></div>
-        <div class="feed-content">${it.content}</div>
-        <div class="feed-ai">
-          <span class="tag ${sc}">${viewTxt[it.market_view]||'中性'}</span>
-          ${it.sentiment!=null?`<span class="${sc}">情绪 ${it.sentiment>=0?'+':''}${it.sentiment}</span>`:''}
-          <span class="when">置信 ${it.confidence}</span>
-          ${sectors}${tickers}${kw}
-          <span class="when">· 🔥${fmt(it.engagement)}</span>
-        </div>
-      </div>`;
-    }).join('');
-  } catch (e) { showMsg('加载失败: ' + e, 'err'); }
+  try { await loadFeed(); }
+  catch (e) { showMsg('加载失败: ' + e, 'err'); }
   finally { btn.disabled = false; btn.textContent = '🤖 加载 AI 观点流'; }
 };
+
+document.querySelectorAll('.feedFilter').forEach(b => b.addEventListener('click', async () => {
+  feedView = b.dataset.view;
+  await loadFeed();
+}));
 
 loadPresets();
 loadBloggers();

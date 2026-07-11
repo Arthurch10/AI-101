@@ -341,6 +341,17 @@ def show_feed(uids, limit):
         console.print("[yellow]暂无观点数据，请先 wft fetch 与 wft analyze[/]")
         return
 
+    # AI 研判摘要
+    from .digest import generate_digest
+    digest_items = [{
+        "market_view": f.get("market_view"),
+        "sentiment": f.get("sentiment"),
+        "sectors": [s for s in (f.get("sectors") or "").split(",") if s],
+        "tickers": [t for t in (f.get("tickers") or "").split(",") if t],
+    } for f in feed]
+    digest = generate_digest(digest_items)
+    console.print(Panel(f"🤖 {digest['text']}", title="AI 研判", border_style="green"))
+
     view_style = {"bullish": ("看多", "green"), "bearish": ("看空", "red"),
                   "neutral": ("中性", "yellow")}
     for f in feed:

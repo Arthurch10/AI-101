@@ -215,11 +215,12 @@ def api_add_preset():
 
 @app.route("/api/feed")
 def api_feed():
-    """AI 观点流: 每条微博 + AI 解读"""
+    """AI 观点流: 每条微博 + AI 解读 + 研判摘要"""
     _ensure_data()
     uids_raw = request.args.get("uids", "").strip()
     uids = [u for u in uids_raw.split(",") if u] or None
     limit = int(request.args.get("limit", 40))
+    view_filter = request.args.get("view", "").strip()  # bullish/bearish/neutral
 
     # 确保有分析结果
     OpinionAnalyzer().analyze_unprocessed(use_llm=False)
@@ -241,7 +242,15 @@ def api_feed():
             "keywords": [k for k in (f.get("keywords") or "").split(",") if k][:4],
             "confidence": round(f.get("confidence") or 0, 2),
         })
-    return jsonify(items)
+
+    # 研判摘要基于全部观点（筛选前）
+    from src.digest import generate_digest
+    digest = generate_digest(items)
+
+    if view_filter in ("bullish", "bearish", "neutral"):
+        items = [it for it in items if it["market_view"] == view_filter]
+
+    return jsonify({"digest": digest, "items": items})
 
 
 @app.route("/api/backtest", methods=["POST"])
