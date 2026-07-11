@@ -187,33 +187,36 @@ def load_demo_data():
         )
 
     # 为每个博主生成帖子
-    now = datetime.now()
-    post_id_counter = 5000000000
-
     for blogger in DEMO_BLOGGERS:
-        uid = blogger["uid"]
-        # 每个博主 8-12 条帖子
-        num_posts = random.randint(8, 12)
-        selected_templates = random.sample(
-            DEMO_POSTS_TEMPLATES, min(num_posts, len(DEMO_POSTS_TEMPLATES))
-        )
-
-        for j, template in enumerate(selected_templates):
-            post_id_counter += 1
-            days_ago = random.randint(0, 25)
-            hours_ago = random.randint(0, 23)
-            created = now - timedelta(days=days_ago, hours=hours_ago)
-
-            post = {
-                "post_id": str(post_id_counter),
-                "blogger_uid": uid,
-                "content": template["content"],
-                "created_at": created.strftime("%Y-%m-%d %H:%M:%S"),
-                "reposts_count": random.randint(*template["reposts"]),
-                "comments_count": random.randint(*template["comments"]),
-                "attitudes_count": random.randint(*template["attitudes"]),
-                "topics": "",
-            }
-            db.save_posts([post])
+        generate_posts_for_blogger(blogger["uid"])
 
     return len(DEMO_BLOGGERS)
+
+
+def generate_posts_for_blogger(uid, num_posts=None):
+    """为指定博主用演示模板生成帖子（供演示数据与精选大 V 复用）"""
+    now = datetime.now()
+    # 用 uid 派生一个稳定的 id 基数，避免与其他博主碰撞
+    base_id = 5000000000 + (abs(hash(uid)) % 900000000)
+
+    if num_posts is None:
+        num_posts = random.randint(8, 12)
+    selected_templates = random.sample(
+        DEMO_POSTS_TEMPLATES, min(num_posts, len(DEMO_POSTS_TEMPLATES))
+    )
+
+    for j, template in enumerate(selected_templates):
+        days_ago = random.randint(0, 25)
+        hours_ago = random.randint(0, 23)
+        created = now - timedelta(days=days_ago, hours=hours_ago)
+        db.save_posts([{
+            "post_id": f"{base_id + j}",
+            "blogger_uid": uid,
+            "content": template["content"],
+            "created_at": created.strftime("%Y-%m-%d %H:%M:%S"),
+            "reposts_count": random.randint(*template["reposts"]),
+            "comments_count": random.randint(*template["comments"]),
+            "attitudes_count": random.randint(*template["attitudes"]),
+            "topics": "",
+        }])
+    return num_posts

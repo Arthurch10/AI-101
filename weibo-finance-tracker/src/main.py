@@ -167,6 +167,45 @@ def search_blogger(keyword, cookie):
     console.print("\n使用 [bold]wft blogger add <UID 或昵称>[/] 添加博主")
 
 
+@blogger_group.command("presets")
+@click.option("--add", "add_uid", default=None, help="按 UID 从精选池添加")
+@click.option("--all", "add_all", is_flag=True, help="添加全部精选大 V")
+def presets_cmd(add_uid, add_all):
+    """精选大 V 池: 列出或一键添加推荐大 V"""
+    from .presets import list_presets, add_preset
+
+    if add_all:
+        added = 0
+        for p in list_presets():
+            if not p["added"]:
+                add_preset(p["uid"])
+                added += 1
+        console.print(f"[green]✓[/] 已添加 {added} 位精选大 V")
+        return
+
+    if add_uid:
+        blogger = add_preset(add_uid)
+        if blogger:
+            console.print(f"[green]✓[/] 已添加: [bold cyan]{blogger['screen_name']}[/]")
+        else:
+            console.print(f"[red]该 UID 不在精选池中[/]")
+        return
+
+    presets = list_presets()
+    table = Table(title="精选大 V 池")
+    table.add_column("UID", style="cyan", width=12)
+    table.add_column("昵称", style="bold")
+    table.add_column("领域", style="magenta")
+    table.add_column("粉丝数", justify="right")
+    table.add_column("状态", justify="center")
+    for p in presets:
+        table.add_row(p["uid"], p["screen_name"], p["field"],
+                      f"{p['followers_count']:,}",
+                      "[green]已添加[/]" if p["added"] else "")
+    console.print(table)
+    console.print("\n添加: [bold]wft blogger presets --add <UID>[/] 或 [bold]--all[/]")
+
+
 @blogger_group.command("list")
 def list_bloggers():
     """列出所有已添加的博主"""
@@ -287,6 +326,45 @@ def analyze(llm):
 
     console.print(f"\n[green]✓[/] 已分析 {len(results)} 条帖子")
     console.print(f"  看多: {bullish}  |  看空: {bearish}  |  中性: {neutral}")
+
+
+@cli.command("feed")
+@click.option("--uid", "uids", multiple=True, help="指定博主 UID，可多次传入")
+@click.option("--limit", default=20, help="显示条数")
+def show_feed(uids, limit):
+    """AI 观点流: 每条微博的 AI 情绪/方向/板块解读"""
+    # 确保已分析
+    OpinionAnalyzer().analyze_unprocessed(use_llm=False)
+
+    feed = db.get_opinion_feed(list(uids) or None, limit)
+    if not feed:
+        console.print("[yellow]暂无观点数据，请先 wft fetch 与 wft analyze[/]")
+        return
+
+    view_style = {"bullish": ("看多", "green"), "bearish": ("看空", "red"),
+                  "neutral": ("中性", "yellow")}
+    for f in feed:
+        view = f.get("market_view") or "neutral"
+        label, color = view_style.get(view, ("中性", "yellow"))
+        sent = f.get("sentiment")
+        sent_str = f"{sent:+.2f}" if sent is not None else "—"
+        sectors = [s for s in (f.get("sectors") or "").split(",") if s]
+        tickers = [t for t in (f.get("tickers") or "").split(",") if t]
+
+        header = (f"[bold cyan]{f['screen_name']}[/]  [dim]{f['created_at']}[/]  "
+                  f"[{color}]{label}[/] 情绪{sent_str}")
+        body = f["content"][:80] + ("..." if len(f["content"]) > 80 else "")
+        tags = ""
+        if sectors:
+            tags += "  板块: " + " ".join(f"#{s}" for s in sectors[:4])
+        if tickers:
+            tags += "  个股: " + " ".join(f"${t}" for t in tickers[:4])
+
+        console.print(header)
+        console.print(f"  {body}")
+        if tags:
+            console.print(f"  [dim]{tags}[/]")
+        console.print()
 
 
 @cli.command("summary")

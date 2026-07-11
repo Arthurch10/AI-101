@@ -241,6 +241,31 @@ def get_latest_rankings(top_n=10):
     return [dict(r) for r in rows]
 
 
+def get_opinion_feed(uids=None, limit=50):
+    """AI 观点流: 联表返回帖子原文 + AI 解读，按时间倒序"""
+    conn = get_connection()
+    base = """
+        SELECT p.post_id, p.blogger_uid, p.content, p.created_at,
+               p.reposts_count, p.comments_count, p.attitudes_count,
+               b.screen_name,
+               o.sentiment, o.market_view, o.sectors, o.tickers,
+               o.keywords, o.confidence
+        FROM posts p
+        JOIN bloggers b ON p.blogger_uid = b.uid
+        LEFT JOIN opinions o ON p.post_id = o.post_id
+    """
+    params = []
+    if uids:
+        placeholders = ",".join("?" for _ in uids)
+        base += f" WHERE p.blogger_uid IN ({placeholders})"
+        params.extend(uids)
+    base += " ORDER BY p.created_at DESC LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(base, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def save_backtest(uid, accuracy, evaluated, correct):
     conn = get_connection()
     conn.execute("""

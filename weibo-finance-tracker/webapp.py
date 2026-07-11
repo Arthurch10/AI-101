@@ -187,6 +187,63 @@ def api_advice():
     })
 
 
+@app.route("/api/presets")
+def api_presets():
+    """返回精选大 V 池"""
+    _ensure_data()
+    from src.presets import list_presets
+    return jsonify(list_presets())
+
+
+@app.route("/api/add_preset", methods=["POST"])
+def api_add_preset():
+    """从精选池一键添加大 V（含演示帖子+分析）"""
+    _ensure_data()
+    from src.presets import add_preset
+    data = request.get_json(silent=True) or {}
+    uid = str(data.get("uid", "")).strip()
+    if not uid:
+        return jsonify({"error": "缺少 uid"}), 400
+    blogger = add_preset(uid, manual=bool(data.get("manual")))
+    if not blogger:
+        return jsonify({"error": "该大 V 不在精选池中"}), 400
+    return jsonify({"ok": True, "blogger": {
+        "uid": blogger["uid"], "screen_name": blogger["screen_name"],
+        "followers_count": blogger["followers_count"],
+    }})
+
+
+@app.route("/api/feed")
+def api_feed():
+    """AI 观点流: 每条微博 + AI 解读"""
+    _ensure_data()
+    uids_raw = request.args.get("uids", "").strip()
+    uids = [u for u in uids_raw.split(",") if u] or None
+    limit = int(request.args.get("limit", 40))
+
+    # 确保有分析结果
+    OpinionAnalyzer().analyze_unprocessed(use_llm=False)
+
+    feed = db.get_opinion_feed(uids, limit)
+    items = []
+    for f in feed:
+        sent = f.get("sentiment")
+        items.append({
+            "post_id": f["post_id"],
+            "screen_name": f["screen_name"],
+            "created_at": f["created_at"],
+            "content": f["content"],
+            "engagement": (f["reposts_count"] + f["comments_count"] + f["attitudes_count"]),
+            "sentiment": round(sent, 3) if sent is not None else None,
+            "market_view": f.get("market_view") or "neutral",
+            "sectors": [s for s in (f.get("sectors") or "").split(",") if s],
+            "tickers": [t for t in (f.get("tickers") or "").split(",") if t],
+            "keywords": [k for k in (f.get("keywords") or "").split(",") if k][:4],
+            "confidence": round(f.get("confidence") or 0, 2),
+        })
+    return jsonify(items)
+
+
 @app.route("/api/backtest", methods=["POST"])
 def api_backtest():
     """用行情回测博主观点准确率，结果写入并用于排名"""

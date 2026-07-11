@@ -76,6 +76,20 @@
   .summary { background: var(--panel2); border-left: 3px solid var(--green); padding: 12px 16px; border-radius: 6px; font-size: 14px; }
   .rotation { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 10px; }
   .disclaimer { color: var(--muted); font-size: 12px; margin-top: 8px; padding: 10px 14px; border: 1px dashed var(--border); border-radius: 8px; }
+  .feed-item { background: var(--panel2); border: 1px solid var(--border); border-left-width: 3px; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+  .feed-item.bull { border-left-color: var(--green); }
+  .feed-item.bear { border-left-color: var(--red); }
+  .feed-item.neu { border-left-color: var(--yellow); }
+  .feed-head { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin-bottom: 6px; }
+  .feed-head .who { font-weight: 700; }
+  .feed-head .when { color: var(--muted); font-size: 12px; }
+  .feed-content { font-size: 13px; margin-bottom: 8px; }
+  .feed-ai { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+  .chip { padding: 2px 8px; border-radius: 6px; background: var(--panel); border: 1px solid var(--border); }
+  .chip.sec { color: var(--accent); }
+  .chip.tk { color: var(--magenta); }
+  .preset .field { font-size: 11px; color: var(--accent); }
+  .blogger.added { opacity: .55; }
   .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
   #results { display: none; }
@@ -108,6 +122,12 @@
     <div id="dataMsg" class="disclaimer" style="display:none;"></div>
   </div>
 
+  <!-- 精选大 V -->
+  <div class="card">
+    <h2>⭐ 精选大 V <span class="badge">点击卡片一键添加到追踪库</span></h2>
+    <div class="blogger-grid" id="presetGrid"></div>
+  </div>
+
   <!-- 博主选择 -->
   <div class="card">
     <h2>② 选择博主 <span class="badge" id="selInfo"></span></h2>
@@ -118,6 +138,16 @@
       <button class="ghost" id="rankBtn">🏆 博主排名</button>
       <button id="runBtn">运行分析 →</button>
     </div>
+  </div>
+
+  <!-- AI 观点流 -->
+  <div class="card">
+    <h2>🤖 AI 观点流 <span class="badge">每条微博的 AI 情绪/方向/板块解读</span></h2>
+    <div class="toolbar" style="margin-bottom:12px;">
+      <button class="ghost" id="feedBtn">🤖 加载 AI 观点流</button>
+      <span class="badge" id="feedMeta"></span>
+    </div>
+    <div id="feedList"></div>
   </div>
 
   <!-- 博主排名 -->
@@ -489,6 +519,71 @@ $('backtestBtn').onclick = async () => {
   finally { btn.disabled = false; btn.textContent = '📊 行情回测准确率'; }
 };
 
+async function loadPresets() {
+  const res = await fetch('/api/presets');
+  const presets = await res.json();
+  $('presetGrid').innerHTML = presets.map(p => `
+    <div class="blogger preset ${p.added ? 'added' : ''}" data-uid="${p.uid}" title="${p.added ? '已在库' : '点击添加'}">
+      <div>
+        <div class="name">${p.screen_name} ${p.added ? '✓' : ''}</div>
+        <div class="field">${p.field}</div>
+        <div class="meta">${fmt(p.followers_count)} 粉丝 · ${p.verified_reason || '—'}</div>
+      </div>
+    </div>`).join('');
+  document.querySelectorAll('#presetGrid .preset').forEach(el => {
+    el.addEventListener('click', async () => {
+      if (el.classList.contains('added')) return;
+      el.style.opacity = '.4';
+      try {
+        const r = await fetch('/api/add_preset', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ uid: el.dataset.uid })
+        });
+        const d = await r.json();
+        if (d.error) { showMsg(d.error, 'err'); el.style.opacity = '1'; return; }
+        showMsg(`✓ 已添加精选大 V：${d.blogger.screen_name}`, 'ok');
+        await loadBloggers();
+        await loadPresets();
+      } catch (e) { showMsg('添加失败: ' + e, 'err'); el.style.opacity = '1'; }
+    });
+  });
+}
+
+$('feedBtn').onclick = async () => {
+  const btn = $('feedBtn');
+  const uids = selected.size ? [...selected] : [];
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 加载中…';
+  try {
+    const qs = uids.length ? ('?uids=' + uids.join(',') + '&limit=40') : '?limit=40';
+    const res = await fetch('/api/feed' + qs);
+    const items = await res.json();
+    if (!items.length) { showMsg('暂无观点数据', 'err'); return; }
+    $('feedMeta').textContent = `共 ${items.length} 条${uids.length ? '（选中博主）' : '（全部博主）'}`;
+    const viewCls = { bullish: 'bull', bearish: 'bear', neutral: 'neu' };
+    const viewTxt = { bullish: '看多', bearish: '看空', neutral: '中性' };
+    $('feedList').innerHTML = items.map(it => {
+      const vc = viewCls[it.market_view] || 'neu';
+      const sc = it.sentiment == null ? 'neu' : sentClass(it.sentiment);
+      const sectors = it.sectors.map(s => `<span class="chip sec">#${s}</span>`).join('');
+      const tickers = it.tickers.map(t => `<span class="chip tk">$${t}</span>`).join('');
+      const kw = it.keywords.map(k => `<span class="chip">${k}</span>`).join('');
+      return `<div class="feed-item ${vc}">
+        <div class="feed-head"><span class="who">${it.screen_name}</span><span class="when">${it.created_at}</span></div>
+        <div class="feed-content">${it.content}</div>
+        <div class="feed-ai">
+          <span class="tag ${sc}">${viewTxt[it.market_view]||'中性'}</span>
+          ${it.sentiment!=null?`<span class="${sc}">情绪 ${it.sentiment>=0?'+':''}${it.sentiment}</span>`:''}
+          <span class="when">置信 ${it.confidence}</span>
+          ${sectors}${tickers}${kw}
+          <span class="when">· 🔥${fmt(it.engagement)}</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) { showMsg('加载失败: ' + e, 'err'); }
+  finally { btn.disabled = false; btn.textContent = '🤖 加载 AI 观点流'; }
+};
+
+loadPresets();
 loadBloggers();
 </script>
 </body>

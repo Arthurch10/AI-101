@@ -52,6 +52,8 @@ python3 webapp.py
 
 界面功能：
 
+- **精选大 V** — 「⭐ 精选大 V」推荐池，点击卡片一键添加（无需搜索，覆盖港股/美股/可转债/ETF/期货等领域）
+- **AI 观点流** — 「🤖 AI 观点流」以信息流展示每条微博 + AI 解读（方向/情绪/板块/个股/关键词）
 - **添加博主** — 输入 UID 或昵称；昵称可先「🔍 按昵称搜索」再点候选卡片添加
 - **勾选博主** — 点击卡片多选，支持全选/清空
 - **博主排名** — 「🏆 博主排名」展示算法 TOP10 与优选 TOP3，可一键「选入分析」
@@ -99,6 +101,11 @@ wft blogger add 1234567890 --manual
 # 查看已追踪博主
 wft blogger list
 
+# 精选大 V 池（无需搜索，一键自选添加）
+wft blogger presets                  # 列出精选大 V
+wft blogger presets --add 2001002001 # 添加指定大 V
+wft blogger presets --all            # 添加全部
+
 # 手动标记已有博主为优选
 wft blogger select 1234567890
 
@@ -128,6 +135,10 @@ wft analyze --llm
 # 查看博主观点摘要
 wft summary
 wft summary --uid 1234567890
+
+# AI 观点流：每条微博的 AI 情绪/方向/板块解读
+wft feed
+wft feed --uid 1234567890 --limit 30
 ```
 
 ### 观点回测 (真实行情校验准确率)
@@ -264,6 +275,7 @@ weibo-finance-tracker/
 │   ├── scheduler.py           # 定时任务调度
 │   ├── market_data.py         # 行情数据获取 (新浪接口 + 模拟)
 │   ├── backtest.py            # 观点回测 (真实行情校验准确率)
+│   ├── presets.py             # 精选大 V 池
 │   └── demo.py                # 演示数据
 ├── templates/
 │   └── index.html             # 网页界面
